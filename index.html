@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renegades Back Order Hub</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e8eaee; --mut:#9aa3b2; --acc:#4f8cff; --acc2:#3a6fd6;
+    --green:#37b86a; --amber:#e7a13b; --red:#e2544a; --purple:#9b6cff;
+    --chip:#222733;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+  header .sub{color:var(--mut);font-size:12px}
+  .grow{flex:1}
+  .tabs{display:flex;gap:4px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:49px;z-index:19;flex-wrap:wrap}
+  .tab{padding:8px 14px;border-radius:8px;cursor:pointer;color:var(--mut);font-weight:600;font-size:13px;user-select:none}
+  .tab:hover{background:var(--panel2)}
+  .tab.on{background:var(--acc);color:#fff}
+  .tab .badge{display:inline-block;min-width:18px;text-align:center;margin-left:6px;background:rgba(255,255,255,.18);border-radius:10px;padding:0 6px;font-size:11px}
+  main{padding:18px;max-width:1280px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  h2{font-size:15px;margin:0 0 12px}
+  .muted{color:var(--mut)}
+  .btn{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px}
+  .btn:hover{background:var(--acc2)}
+  .btn.sec{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+  .btn.sec:hover{background:var(--chip)}
+  .btn.gh{background:var(--green)} .btn.gh:hover{filter:brightness(1.08)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 9px;font:inherit;width:100%}
+  textarea{resize:vertical;min-height:80px}
+  label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:13px}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  tr:hover td{background:var(--panel2)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .s-new{background:rgba(155,108,255,.16);color:#c4adff}
+  .s-ordered{background:rgba(231,161,59,.16);color:#f0c178}
+  .s-arrived{background:rgba(79,140,255,.18);color:#9cc0ff}
+  .s-embroidery{background:rgba(56,189,170,.16);color:#5fd6c2}
+  .s-ready{background:rgba(79,140,255,.18);color:#9cc0ff}
+  .s-notified{background:rgba(55,184,106,.16);color:#84d8a6}
+  .s-done{background:rgba(255,255,255,.08);color:var(--mut)}
+  .chan{font-size:11px;color:var(--mut)}
+  .chan b{color:var(--txt)}
+  .right{text-align:right}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:34px;text-align:center;color:var(--mut);cursor:pointer;transition:.15s}
+  .drop:hover,.drop.drag{border-color:var(--acc);background:rgba(79,140,255,.06);color:var(--txt)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:560px;width:100%;padding:20px;max-height:90vh;overflow:auto}
+  .modal h3{margin:0 0 4px;font-size:16px}
+  .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--mut)}
+  .seg span.on{background:var(--acc);color:#fff}
+  .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .kv .muted{color:var(--mut)}
+  .tag{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 7px;font-size:11px;color:var(--mut);margin-left:6px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:11px 18px;border-radius:10px;font-weight:600;z-index:80;display:none}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .filt{padding:5px 12px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:600;color:var(--mut)}
+  .filt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+  .stat .n{font-size:22px;font-weight:800;line-height:1}
+  .stat .l{font-size:11px;color:var(--mut);margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
+  .stat.hot{border-color:rgba(231,161,59,.5)} .stat.hot .n{color:var(--amber)}
+  .search{max-width:240px}
+  .stsel{border:1px solid var(--line);border-radius:20px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;width:auto;max-width:140px}
+  .stsel:focus{outline:2px solid var(--acc)}
+  .ehdr{display:flex;gap:10px;align-items:center;padding:12px 14px;flex-wrap:wrap}
+  .ehdr b{font-size:15px}
+  .ocard{padding:0;margin-bottom:12px}
+  .ohdr{display:flex;gap:10px;align-items:center;padding:12px 14px;flex-wrap:wrap;background:var(--panel2);border-radius:12px 12px 0 0}
+  .ohdr b{font-size:15px}
+  .irow{display:flex;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .irow .iname{flex:1;min-width:170px}
+  .erow{display:flex;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .lgin{max-width:190px}
+  .needslogo{border-color:rgba(231,161,59,.5)}
+  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .small{font-size:12px}
+  a{color:var(--acc)}
+  .warn{background:rgba(231,161,59,.12);border:1px solid rgba(231,161,59,.4);color:#f0c178;padding:8px 12px;border-radius:8px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧵 Renegades Back Order Hub</h1>
+  <div class="grow"></div>
+  <span class="sub" id="counts"></span>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="modal-bg" id="loginbg"><div class="modal" style="max-width:360px;text-align:center">
+  <h3 style="margin:0 0 4px">🧵 Renegades Back Order Hub</h3>
+  <p class="muted small" style="margin:0 0 14px">Enter the shop password to continue.</p>
+  <input id="pw" type="password" placeholder="Shop password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+  <div id="loginerr" style="color:var(--red);font-size:12px;min-height:16px;margin-top:6px"></div>
+  <button class="btn" style="width:100%" onclick="doLogin()">Sign in</button>
+</div></div>
+<main id="view"></main>
+
+<div class="modal-bg" id="modalbg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+/* ---------------- sample data ---------------- */
+const daysAgo=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
+const SAMPLE = [
+  {id:'L1', order:'1042', customer:'Maria Gonzalez', email:'maria.g@example.com', phone:'7275550142',
+   pref:'sms', fulfill:'pickup', product:'NCS Performance Polo K-5', partNo:'5728', color:'Navy', size:'Youth M',
+   qty:2, status:'embroidery', logo:'NCS Crest', po:'PO-318', notes:'', addedAt:daysAgo(4), notifyLog:[]},
+  {id:'L2', order:'1055', customer:'Tom Becker', email:'tbecker@example.com', phone:'7275550161',
+   pref:'sms', fulfill:'pickup', product:'NCS Performance Polo 6-12', partNo:'K500', color:'White', size:'Adult M',
+   qty:1, status:'embroidery', logo:'NCS Crest', po:'PO-320', notes:'', addedAt:daysAgo(3), notifyLog:[]},
+  {id:'L3', order:'1037', customer:'Dana Lee', email:'dana.lee@example.com', phone:'7275550170',
+   pref:'both', fulfill:'pickup', product:'Grace Cross Crest 1/4 Zip', partNo:'F247', color:'Black', size:'Adult XL',
+   qty:1, status:'embroidery', logo:'Grace Cross Crest', po:'PO-310', notes:'', addedAt:daysAgo(9), notifyLog:[]},
+  {id:'L4', order:'1042', customer:'Maria Gonzalez', email:'maria.g@example.com', phone:'7275550142',
+   pref:'sms', fulfill:'pickup', product:'OSL Shield Crest Polo', partNo:'K500', color:'Green', size:'Adult L',
+   qty:1, status:'ordered', logo:'', po:'PO-318', notes:'', addedAt:daysAgo(4), notifyLog:[]},
+  {id:'L5', order:'1051', customer:'James Whitfield', email:'jwhit@example.com', phone:'7275550199',
+   pref:'email', fulfill:'ship', product:'Academy Prep House Shirt — Amistad', partNo:'PC61', color:'Red', size:'Adult M',
+   qty:3, status:'new', logo:'', po:'', notes:'Backordered from SanMar', addedAt:daysAgo(2), notifyLog:[]},
+  {id:'L6', order:'1060', customer:'Rosa Mendez', email:'rmendez@example.com', phone:'7275550188',
+   pref:'sms', fulfill:'pickup', product:'Renegades Pleated Pants', partNo:'PANT-KHK', color:'Khaki', size:'Adult 12',
+   qty:1, status:'ready', logo:'', po:'PO-321', notes:'No decoration — ready as-is', addedAt:daysAgo(1), notifyLog:[]},
+  {id:'L7', order:'1029', customer:'Priya Patel', email:'priya.p@example.com', phone:'7275550133',
+   pref:'email', fulfill:'pickup', product:'NCS Mustang Spirit Tee', partNo:'64000', color:'Gold', size:'Youth L',
+   qty:4, status:'done', logo:'', po:'PO-301', notes:'Picked up', addedAt:daysAgo(14),
+   notifyLog:[{when:'2026-06-18 14:02', chan:'email', to:'priya.p@example.com'}]},
+];
+
+let DB = [];
+let PLOGOS = {};
+let SETTINGS = {};
+let TAB = 'board';
+let FILTER = 'open';
+
+/* default templates (editable in Settings) */
+const DEF_SETTINGS = {
+  shop:'Renegades Sportswear', shopAddr:'', fromEmail:'orders@renegadessportswear.com',
+  pickupMsg:'Hi {name}, good news — your back-ordered {item} is now in and ready for pickup at {shop}. See you soon!',
+  shipMsg:'Hi {name}, your back-ordered {item} just arrived and is heading out to you. We’ll send tracking shortly. Thanks for your patience!'
+};
+function settings(){ return Object.assign({}, DEF_SETTINGS, SETTINGS||{}); }
+
+/* ---------------- cloud API (shared Neon DB, live multi-computer sync) ---------------- */
+const API='/api';
+let LOGGED_IN=false, lastSig='';
+async function apiGET(){ try{ const r=await fetch(API+'/state'); if(!r.ok){ showLogin(); return null; } LOGGED_IN=true; return await r.json(); }catch(e){ showLogin(); return null; } }
+async function apiPOST(action,payload){ try{ const r=await fetch(API+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},payload))}); if(r.status===401){ showLogin(); return false; } return r.ok; }catch(e){ toast('Save failed — check connection'); return false; } }
+async function loadState(){ const d=await apiGET(); if(!d) return; DB=d.items||[]; PLOGOS=d.plogos||{}; SETTINGS=d.settings||{}; const sig=JSON.stringify(d); if(sig!==lastSig){ lastSig=sig; render(); } }
+// persist helpers — each mutation updates locally (optimistic), then writes the change to the cloud
+function persist(item){ return apiPOST('upsert',{item}); }
+function persistMany(items){ return apiPOST('upsertMany',{items}); }
+function persistDelete(id){ return apiPOST('delete',{id}); }
+function persistPlogo(product,logo){ return apiPOST('plogo',{product,logo}); }
+function persistSettings(s){ return apiPOST('settings',{settings:s}); }
+// "save" now just re-renders; persistence happens per-mutation above
+function save(){ render(); }
+function showLogin(){ LOGGED_IN=false; const el=document.getElementById('loginbg'); if(el) el.classList.add('on'); }
+async function doLogin(){
+  const pw=document.getElementById('pw').value;
+  try{ const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(r.ok){ document.getElementById('loginbg').classList.remove('on'); document.getElementById('loginerr').textContent=''; lastSig=''; await loadState(); }
+    else document.getElementById('loginerr').textContent='Wrong password';
+  }catch(e){ document.getElementById('loginerr').textContent='Connection error'; }
+}
+
+/* ---------------- status helpers ---------------- */
+const STATUS = {new:'Need to Order', ordered:'On Order', embroidery:'In Embroidery', ready:'Ready', notified:'Notified', done:'Done'};
+const FLOW = ['new','ordered','embroidery','ready','notified','done'];
+function stClass(s){ return {new:'s-new',ordered:'s-ordered',embroidery:'s-embroidery',ready:'s-ready',notified:'s-notified',done:'s-done'}[s]; }
+function statusPill(s){ return `<span class="pill ${stClass(s)}">${STATUS[s]}</span>`; }
+function statusSelect(l){ return `<select class="stsel ${stClass(l.status)}" onchange="setStatus('${l.id}',this.value)">${FLOW.map(s=>`<option value="${s}" ${s===l.status?'selected':''}>${STATUS[s]}</option>`).join('')}</select>`; }
+function setStatus(id,v){ const l=DB.find(x=>x.id===id); if(!l||l.status===v) return; l.status=v; if(v==='embroidery'&&!l.logo&&PLOGOS[l.product]) l.logo=PLOGOS[l.product]; persist(l); save(); toast('Status → '+STATUS[v]); }
+// arrival fork: ready (no decoration) vs embroidery (needs logo)
+function arrive(id,to){ const l=DB.find(x=>x.id===id); if(!l) return; l.status=to; if(to==='embroidery'&&!l.logo&&PLOGOS[l.product]) l.logo=PLOGOS[l.product]; persist(l); save(); toast(to==='ready'?'Arrived — Ready':'Sent to Embroidery'); }
+/* product → logo memory: the app learns which logo each product gets */
+function allLogos(){ const s=new Set(); Object.values(PLOGOS).forEach(v=>v&&s.add(v)); DB.forEach(l=>l.logo&&s.add(l.logo)); return [...s].sort(); }
+function setItemLogo(id,logo){ const l=DB.find(x=>x.id===id); if(!l) return; l.logo=logo.trim(); if(l.logo&&l.product){ PLOGOS[l.product]=l.logo; persistPlogo(l.product,l.logo); } persist(l); save(); }
+function embroidered(id){ const l=DB.find(x=>x.id===id); if(!l) return; l.status='ready'; persist(l); save(); toast('Embroidered → Ready'); }
+function groupDone(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(Boolean); arr.forEach(l=>l.status='ready'); persistMany(arr); save(); toast(`${arr.length} → Ready`); }
+function chanLabel(p){ return {email:'✉️ Email',sms:'💬 Text',both:'✉️💬 Both',call:'📞 Call','':'❓ Set contact'}[p]||p; }
+function isOpen(l){ return l.status!=='done'; }
+// a row "needs contact" if we can't actually reach them on their chosen channel
+function needsContact(l){
+  if(!l.customer) return true;
+  if(!l.pref) return true;
+  if((l.pref==='sms'||l.pref==='both'||l.pref==='call')&&!l.phone) return true;
+  if((l.pref==='email'||l.pref==='both')&&!l.email) return true;
+  return false;
+}
+
+/* ---------------- tabs ---------------- */
+const TABS = [
+  {id:'board', label:'Back Orders'},
+  {id:'orderlist', label:'Order List'},
+  {id:'embroidery', label:'Embroidery'},
+  {id:'import', label:'Import'},
+  {id:'settings', label:'Settings'},
+];
+function renderTabs(){
+  const openOrders = [...new Set(DB.map(l=>l.order))].filter(o=>DB.some(l=>l.order===o&&isOpen(l))).length;
+  const toOrder = DB.filter(l=>l.status==='new').length;
+  const emb = DB.filter(l=>l.status==='embroidery').length;
+  const readyN = readyOrders().length;
+  document.getElementById('tabs').innerHTML = TABS.map(t=>{
+    let b='';
+    if(t.id==='board' && openOrders) b=`<span class="badge">${openOrders}</span>`;
+    if(t.id==='orderlist' && toOrder) b=`<span class="badge">${toOrder}</span>`;
+    if(t.id==='embroidery' && emb) b=`<span class="badge">${emb}</span>`;
+    return `<div class="tab ${TAB===t.id?'on':''}" onclick="go('${t.id}')">${t.label}${b}</div>`;
+  }).join('');
+  document.getElementById('counts').textContent =
+    `${openOrders} open · ${toOrder} to order · ${emb} in embroidery · ${readyN} ready`;
+}
+function go(t){ TAB=t; render(); }
+
+/* ---------------- board ---------------- */
+let SEARCH='';
+function daysWaiting(l){ return Math.floor((Date.now()-new Date(l.addedAt+'T00:00:00').getTime())/86400000); }
+function ageBadge(l){ if(!isOpen(l)) return ''; const d=daysWaiting(l); if(isNaN(d)||d<0) return '';
+  const c=d>=14?'var(--red)':d>=7?'var(--amber)':'var(--mut)';
+  return ` <span class="tag" style="color:${c}">${d===0?'today':d===1?'1 day':d+' days'}</span>`; }
+/* ----- order helpers (board is grouped by order) ----- */
+function orderItems(o){ return DB.filter(l=>l.order===o); }
+function orderOpen(o){ return orderItems(o).filter(isOpen); }
+function orderReadyToNotify(o){ const op=orderOpen(o); return op.length>0 && op.every(l=>l.status==='ready'); }
+function readyOrders(){ return [...new Set(DB.map(l=>l.order))].filter(orderReadyToNotify); }
+function oldestDate(items){ return items.reduce((m,i)=> i.addedAt<m?i.addedAt:m, '9999'); }
+function boOrders(){
+  const byOrder={}; DB.forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
+  let orders=Object.keys(byOrder).map(o=>({order:o, items:byOrder[o]}));
+  orders=orders.filter(g=>{
+    const open=g.items.some(isOpen);
+    if(FILTER==='open') return open;
+    if(FILTER==='ready') return orderReadyToNotify(g.order);
+    if(FILTER==='done') return !open;
+    return true;
+  });
+  const q=SEARCH.trim().toLowerCase();
+  if(q) orders=orders.filter(g=> (g.order+' '+g.items.map(l=>[l.customer,l.product,l.partNo,l.color,l.size].join(' ')).join(' ')).toLowerCase().includes(q));
+  orders.sort((a,b)=>{ const oa=oldestDate(a.items), ob=oldestDate(b.items); return FILTER==='done' ? (oa<ob?1:-1) : (oa<ob?-1:1); });
+  return orders;
+}
+function itemRow(i){
+  let act='';
+  if(i.status==='ordered') act=`<button class="btn sm gh" onclick="arrive('${i.id}','ready')">✓ Ready</button><button class="btn sm sec" onclick="arrive('${i.id}','embroidery')">🧵 Embroidery</button>`;
+  else if(i.status==='embroidery') act=`<button class="btn sm sec" onclick="go('embroidery')">In embroidery →</button>`;
+  return `<div class="irow">
+    <div class="iname"><b>${i.product}</b><div class="small muted">${i.color||'—'} · ${i.size||'—'} · ${i.partNo||'—'} · ×${i.qty}${i.status==='embroidery'&&i.logo?` · 🧵 ${i.logo}`:''}</div></div>
+    ${act}${statusSelect(i)}<button class="btn sm sec" onclick="openEdit('${i.id}')">Edit</button>
+  </div>`;
+}
+function ordersHtml(){
+  const orders=boOrders();
+  if(!orders.length) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>`;
+  return orders.map(g=>{
+    const l0=g.items[0], open=g.items.filter(isOpen), readyN=g.items.filter(i=>i.status==='ready').length;
+    const canNotify=orderReadyToNotify(g.order), allDone=!open.length;
+    const nc=open.length&&needsContact(l0);
+    const ageRef={addedAt:oldestDate(g.items), status: allDone?'done':'open'};
+    const prog = allDone ? `<span class="tag">✓ done</span>`
+      : canNotify ? `<span class="tag" style="background:rgba(79,140,255,.18);color:#9cc0ff">all ${open.length} ready</span>`
+      : `<span class="tag">${readyN}/${open.length} ready</span>`;
+    const notifyBtn = canNotify ? `<button class="btn sm" onclick="openNotifyOrder('${g.order}')">Notify →</button>` : '';
+    return `<div class="card ocard">
+      <div class="ohdr">
+        <div><b>#${g.order}</b> · ${l0.customer||'<span class="muted">(no name)</span>'}${nc?' <span class="tag" style="background:rgba(231,161,59,.18);color:#f0c178">⚠ needs contact</span>':''}
+          <div class="chan">${chanLabel(l0.pref)} · ${l0.fulfill==='pickup'?'🏬 Pickup':'📦 Ship'} · ${g.items.length} item${g.items.length>1?'s':''}${ageBadge(ageRef)}</div></div>
+        <div class="grow" style="flex:1"></div>${prog}${notifyBtn}
+      </div>
+      ${g.items.map(itemRow).join('')}
+    </div>`;
+  }).join('');
+}
+function fillBody(){ const b=document.getElementById('boBody'); if(b) b.innerHTML=ordersHtml(); }
+function applySearch(v){ SEARCH=v; fillBody(); }
+function renderBoard(){
+  const cnt=s=>DB.filter(l=>l.status===s).length;
+  const allOrders=[...new Set(DB.map(l=>l.order))];
+  const openOrders=allOrders.filter(o=>orderOpen(o).length).length;
+  const doneOrders=allOrders.filter(o=>!orderOpen(o).length).length;
+  const readyOrd=readyOrders().length;
+  const needsOrd=allOrders.filter(o=>orderOpen(o).length&&needsContact(orderItems(o)[0])).length;
+  const stat=(n,lab,hot)=>`<div class="stat ${hot?'hot':''}"><div class="n">${n}</div><div class="l">${lab}</div></div>`;
+  const f=(id,lab,n)=>`<div class="filt ${FILTER===id?'on':''}" onclick="setFilter('${id}')">${lab} <b>${n}</b></div>`;
+  document.getElementById('view').innerHTML = `
+    <div class="stats">
+      ${stat(cnt('new'),'Need to Order')}
+      ${stat(cnt('ordered'),'On Order')}
+      ${stat(cnt('embroidery'),'In Embroidery')}
+      ${stat(readyOrd,'Orders ready')}
+      ${stat(needsOrd,'Needs contact',needsOrd>0)}
+    </div>
+    <div class="filters">
+      ${f('open','Open',openOrders)}
+      ${f('ready','Ready to notify',readyOrd)}
+      ${f('done','Done',doneOrders)}
+      ${f('all','All',allOrders.length)}
+      <div class="grow" style="flex:1"></div>
+      <input class="search" id="boSearch" placeholder="Search name, order, item…" value="${SEARCH.replace(/"/g,'&quot;')}" oninput="applySearch(this.value)">
+      <button class="btn sm sec" onclick="go('import')">+ Import PDF</button>
+      <button class="btn sm sec" onclick="addManual()">+ Add manually</button>
+    </div>
+    <div id="boBody">${ordersHtml()}</div>`;
+}
+function setFilter(f){ FILTER=f; render(); }
+
+/* ---------------- notify flow (ONE message per order, when all items ready) ---------------- */
+function joinList(a){ if(a.length<=1) return a[0]||''; if(a.length===2) return a[0]+' and '+a[1]; return a.slice(0,-1).join(', ')+', and '+a[a.length-1]; }
+function toggleSeg(el){ el.classList.toggle('on'); }
+function openNotifyOrder(order){
+  const items=orderOpen(order).filter(l=>l.status==='ready');
+  if(!items.length){ toast('Nothing ready to notify on this order'); return; }
+  const l=items[0], s=settings();
+  const itemLines=items.map(i=>`<div class="kv"><span>${i.product}</span><span class="muted">${i.color} · ${i.size} · ×${i.qty}</span></div>`).join('');
+  if(l.pref==='call'){
+    modal(`<h3>Call ${l.customer||'customer'}</h3>
+      <div class="muted small">Order #${order} · ${items.length} item${items.length>1?'s':''} ready</div>
+      <div class="kv" style="margin-top:12px"><span class="muted">Phone</span><span><b>${l.phone||'— none on file —'}</b></span></div>
+      ${itemLines}
+      <p class="small muted" style="margin-top:10px">This customer asked to be <b>called</b>. Phone them, then log it.</p>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn sec" onclick="closeModal()">Cancel</button>
+        <button class="btn gh" onclick="finishNotify('${order}','call')">✓ Called — mark Notified</button></div>`);
+    return;
+  }
+  const itemList=joinList(items.map(i=>`${i.product} (${i.color}, ${i.size})`));
+  const tmpl = l.fulfill==='ship'? s.shipMsg : s.pickupMsg;
+  const msg = tmpl.replace(/{name}/g,(l.customer||'there').split(' ')[0]).replace(/{item}/g,itemList).replace(/{shop}/g,s.shop);
+  const sendSms = l.pref==='sms'||l.pref==='both', sendEmail = l.pref==='email'||l.pref==='both';
+  modal(`
+    <h3>Notify ${l.customer||'customer'}</h3>
+    <div class="muted small">Order #${order} · ${items.length} item${items.length>1?'s':''} ready — one message covers them all</div>
+    <div style="margin:10px 0">${itemLines}</div>
+    ${!l.customer?`<label>Customer name</label><input id="n_name" value="" placeholder="Add a name">`:''}
+    <div class="row">
+      <div style="flex:1"><label>Text to (phone)</label><input id="n_phone" value="${l.phone||''}" placeholder="e.g. 7275551234"></div>
+      <div style="flex:1"><label>Email to</label><input id="n_email" value="${l.email||''}" placeholder="name@email.com"></div>
+    </div>
+    <div class="row" style="margin:12px 0 4px">
+      <label style="margin:0">Send via</label>
+      <div class="seg" id="chanSeg">
+        <span class="${sendSms?'on':''}" data-c="sms" onclick="toggleSeg(this)">💬 Text</span>
+        <span class="${sendEmail?'on':''}" data-c="email" onclick="toggleSeg(this)">✉️ Email</span>
+      </div>
+    </div>
+    <label>Message (you can edit before sending)</label>
+    <textarea id="notifyMsg">${msg}</textarea>
+    <div class="warn" style="margin-top:12px">Actual sending turns on once we connect Resend (email) &amp; Twilio (text). For now this logs the notification and marks the order done.</div>
+    <div class="row" style="justify-content:flex-end;margin-top:16px">
+      <button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn gh" onclick="finishNotify('${order}')">Send & mark Notified</button>
+    </div>`);
+}
+function finishNotify(order,viaCall){
+  const items=orderOpen(order).filter(l=>l.status==='ready');
+  let chans=['call'];
+  if(!viaCall){
+    // persist any contact info typed in the popup to EVERY item on the order
+    const nm=document.getElementById('n_name'), np=document.getElementById('n_phone'), ne=document.getElementById('n_email');
+    orderItems(order).forEach(i=>{ if(nm&&nm.value.trim())i.customer=nm.value.trim(); if(np)i.phone=np.value.replace(/[^\d]/g,''); if(ne)i.email=ne.value.trim(); });
+    chans=[...document.querySelectorAll('#chanSeg span.on')].map(s=>s.dataset.c);
+    if(!chans.length){ toast('Pick at least one channel'); return; }
+    const l=items[0];
+    if(chans.includes('sms')&&!l.phone){ toast('Add a phone number to text'); return; }
+    if(chans.includes('email')&&!l.email){ toast('Add an email address'); return; }
+  }
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  items.forEach(i=>{ i.notifyLog.push({when:now, chan:chans.join('+'), to:[i.phone,i.email].filter(Boolean).join(' / ')||(i.phone||'—')}); i.status='notified'; });
+  persistMany(orderItems(order)); // contact + status applied to the whole order
+  closeModal(); save(); toast(`Notified — ${items.length} item${items.length>1?'s':''} on #${order}`);
+}
+
+/* ---------------- edit / add ---------------- */
+function openEdit(id){ editForm(DB.find(x=>x.id===id)); }
+function addManual(){
+  editForm({id:'L'+Date.now(), order:'', customer:'', email:'', phone:'', pref:'sms', fulfill:'pickup',
+    product:'', partNo:'', color:'', size:'', qty:1, status:'new', logo:'', po:'', notes:'',
+    addedAt:new Date().toISOString().slice(0,10), notifyLog:[], _new:true});
+}
+function editForm(l){
+  const opt=(v,cur,lab)=>`<option value="${v}" ${v===cur?'selected':''}>${lab}</option>`;
+  modal(`
+    <h3>${l._new?'Add back order':'Edit back order'}</h3>
+    <div class="row"><div style="flex:1"><label>Order #</label><input id="f_order" value="${l.order}"></div>
+      <div style="flex:2"><label>Customer name</label><input id="f_customer" value="${l.customer}"></div></div>
+    <div class="row"><div style="flex:1"><label>Email</label><input id="f_email" value="${l.email}"></div>
+      <div style="flex:1"><label>Phone</label><input id="f_phone" value="${l.phone}"></div></div>
+    <div class="row"><div style="flex:1"><label>Preferred contact</label><select id="f_pref">${opt('',l.pref,'— not set —')}${opt('sms',l.pref,'Text')}${opt('email',l.pref,'Email')}${opt('both',l.pref,'Both')}${opt('call',l.pref,'Phone call')}</select></div>
+      <div style="flex:1"><label>Fulfillment</label><select id="f_fulfill">${opt('pickup',l.fulfill,'Pickup')}${opt('ship',l.fulfill,'Ship')}</select></div></div>
+    <label>Product</label><input id="f_product" value="${l.product}">
+    <div class="row"><div style="flex:1"><label>Part #</label><input id="f_partNo" value="${l.partNo}"></div>
+      <div style="flex:1"><label>Color</label><input id="f_color" value="${l.color}"></div>
+      <div style="flex:1"><label>Size</label><input id="f_size" value="${l.size}"></div>
+      <div style="width:80px"><label>Qty</label><input id="f_qty" type="number" value="${l.qty}"></div></div>
+    <div class="row"><div style="flex:1"><label>Status</label><select id="f_status">${FLOW.map(s=>opt(s,l.status,STATUS[s])).join('')}</select></div>
+      <div style="flex:1"><label>PO #</label><input id="f_po" value="${l.po}"></div></div>
+    <label>Logo (for embroidery — leave blank if no decoration)</label><input id="f_logo" list="logolist" value="${(l.logo||'').replace(/"/g,'&quot;')}" placeholder="e.g. NCS Crest">
+    <datalist id="logolist">${allLogos().map(g=>`<option value="${g.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+    <label>Notes</label><textarea id="f_notes">${l.notes}</textarea>
+    ${(l.notifyLog&&l.notifyLog.length)?`<label>Notification history</label>${l.notifyLog.map(h=>`<div class="kv"><span>${({sms:'💬 Text',email:'✉️ Email','sms+email':'✉️💬 Both',call:'📞 Call'}[h.chan]||h.chan)} → ${h.to}</span><span class="muted">${h.when}</span></div>`).join('')}`:''}
+    <div class="row" style="justify-content:space-between;margin-top:16px">
+      ${l._new?'<span></span>':`<button class="btn sec" style="background:rgba(226,84,74,.15);border-color:rgba(226,84,74,.4);color:#f0a39c" onclick="delLine('${l.id}')">Delete</button>`}
+      <div class="row"><button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveLine('${l.id}',${!!l._new})">Save</button></div>
+    </div>`);
+}
+function val(id){ return document.getElementById(id).value.trim(); }
+function saveLine(id,isNew){
+  const data={order:val('f_order'),customer:val('f_customer'),email:val('f_email'),phone:val('f_phone'),
+    pref:val('f_pref'),fulfill:val('f_fulfill'),product:val('f_product'),partNo:val('f_partNo'),
+    color:val('f_color'),size:val('f_size'),qty:+val('f_qty')||1,status:val('f_status'),logo:val('f_logo'),po:val('f_po'),notes:val('f_notes')};
+  if(data.logo&&data.product) { PLOGOS[data.product]=data.logo; persistPlogo(data.product,data.logo); }
+  let item;
+  if(isNew){ item=Object.assign({id,addedAt:new Date().toISOString().slice(0,10),notifyLog:[],source:'manual'},data); DB.unshift(item); }
+  else { item=Object.assign(DB.find(x=>x.id===id), data); }
+  persist(item); closeModal(); save(); toast('Saved');
+}
+function delLine(id){ DB=DB.filter(x=>x.id!==id); persistDelete(id); closeModal(); save(); toast('Deleted'); }
+
+/* ---------------- import (Shopify sync + PDF parser) ---------------- */
+function renderImport(){
+  document.getElementById('view').innerHTML = `
+    <div class="card">
+      <h2>Sync from Shopify</h2>
+      <p class="muted">Pulls every Renegades order whose note has <b>b/o</b>, with the customer's name, phone &amp; email attached, straight onto the board. Runs automatically every few minutes — or pull now:</p>
+      <button class="btn" onclick="syncShopify()">⟳ Sync from Shopify now</button>
+      <span class="muted small" id="syncStatus" style="margin-left:10px"></span>
+    </div>
+    <div class="card">
+      <h2>Or import a packing-slip PDF (backup)</h2>
+      <p class="muted">Drop the Shopify <b>packing slip</b> PDF (one or more) — handy if you'd rather not wait for a sync. Reads order #, items, SKU/part #, qty, and the b/o note. <b>Use the packing slip, not the order-page printout.</b></p>
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        <div style="font-size:34px">📄</div>
+        <div><b>Drop packing slip PDF</b> or click to choose</div>
+      </div>
+      <input type="file" id="file" accept="application/pdf" multiple style="display:none" onchange="onPick(event)">
+      <div class="warn" style="margin-top:14px">PDF slips have the items + contact preference but not the customer's phone/email — those rows flag <b>“needs contact.”</b> Shopify sync fills contact automatically, so it's the preferred path.</div>
+    </div>`;
+  const d=document.getElementById('drop');
+  d.addEventListener('dragover',ev=>{ev.preventDefault();d.classList.add('drag')});
+  d.addEventListener('dragleave',ev=>{ev.preventDefault();d.classList.remove('drag')});
+  d.addEventListener('drop',ev=>{ev.preventDefault();d.classList.remove('drag');handleFiles(ev.dataTransfer.files)});
+}
+function onPick(e){ handleFiles(e.target.files); e.target.value=''; }
+async function handleFiles(files){
+  const pdfs=[...files].filter(f=>f.type==='application/pdf'||/\.pdf$/i.test(f.name));
+  if(!pdfs.length){ toast('That wasn’t a PDF'); return; }
+  let all=[];
+  for(const f of pdfs){ try{ all=all.concat(parse(await extractText(await f.arrayBuffer()))); }catch(e){ console.error(e); toast('Could not read '+f.name); } }
+  importParsed(all);
+}
+async function loadSamplePDF(){
+  toast('Reading sample…');
+  try{ const buf=await (await fetch('sample_packing_slip.pdf')).arrayBuffer(); importParsed(parse(await extractText(buf))); }
+  catch(e){ console.error(e); toast('Sample read failed'); }
+}
+
+/* rebuild clean lines from pdf.js by grouping text by vertical position */
+async function extractText(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise; const out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const pg=await pdf.getPage(p); const c=await pg.getTextContent(); const rows={};
+    for(const it of c.items){ const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str}); }
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      const line=rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim();
+      if(line) out.push(line);
+    });
+  }
+  return out.join('\n');
+}
+
+const SIZE=/\b(youth|adult|toddler|infant|yxs|ys|ym|yl|yxl|xs|xxs|small|medium|large|x-?large|xl|2xl|3xl|one size)\b/i;
+function channelFromNote(note){
+  const n=note.toLowerCase();
+  const sms=/\b(text|sms|txt)\b/.test(n), email=/\bemail\b/.test(n), call=/\b(call|phone)\b/.test(n);
+  if(sms&&email) return 'both';
+  if(sms) return 'sms'; if(email) return 'email'; if(call) return 'call';
+  return '';
+}
+function parse(text){
+  const out=[];
+  for(const b of text.split(/(?=Order\s+#\d+)/)){
+    const om=b.match(/Order\s+#(\d+)/); if(!om) continue; const order=om[1];
+    const dm=b.match(/([A-Za-z]+ \d{1,2}, \d{4})/); const date=dm?dm[1]:'';
+    let cust=''; let sm=b.match(/SHIP TO\s*\n(.*?)(?:\n)/);
+    cust=sm?sm[1].trim():'';
+    if(/^no shipping address/i.test(cust)||!cust){ const bm=b.match(/BILL TO\s*\n(.*?)(?:\n)/); cust=bm?bm[1].trim():''; if(/^no billing address/i.test(cust)) cust=''; }
+    if(/^no .* address/i.test(cust)) cust='';
+    const nm=b.match(/NOTES\s*\n([\s\S]*?)(?:\nThank you|\nRenegades Sportswear|$)/i);
+    const note=nm?nm[1].trim().replace(/\s+/g,' '):'';
+    const pm=note.match(/(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/); const phone=pm?pm[1].replace(/\D/g,''):'';
+    const em=note.match(/[\w.+-]+@[\w-]+\.[\w.-]+/); const email=em?em[0]:'';
+    const pref=channelFromNote(note)||'';
+    const im=b.match(/ITEMS\s+QUANTITY([\s\S]*?)(?:\nNOTES|\nThank you|$)/i);
+    const seg=im?im[1]:''; const lines=seg.split('\n').map(s=>s.trim()).filter(Boolean);
+    const SKURE=/^[A-Z0-9]{2,}(?:-[A-Z0-9]+)+$/;
+    const items=[]; let pend=[];
+    for(let i=0;i<lines.length;i++){
+      const ln=lines[i];
+      const qm=ln.match(/(\d+)\s+of\s+(\d+)/);   // qty sits at the END of the variant line
+      if(qm){
+        const qty=+qm[2];
+        const variant=ln.slice(0,qm.index).trim();
+        const product=pend.join(' ').trim();
+        let sku='';
+        if(i+1<lines.length && SKURE.test(lines[i+1])){ sku=lines[i+1]; i++; }  // SKU is the next line
+        items.push(buildItem(product,variant,sku,qty));
+        pend=[];
+      } else if(SKURE.test(ln) && items.length && !items[items.length-1].partNo){
+        items[items.length-1].partNo=ln;          // stray SKU for the item just closed
+      } else {
+        pend.push(ln);
+      }
+    }
+    if(items.length) out.push({order,date,cust,note,pref,phone,email,items});
+  }
+  return out;
+}
+function buildItem(product,variant,sku,qty){
+  let color='',size='';
+  if(variant.includes('/')){
+    const parts=variant.split('/').map(s=>s.trim());
+    for(const p of parts){ if(SIZE.test(p)&&!size) size=p; else color=p; }
+    if(!size&&parts.length>1) size=parts[1]; if(!color&&parts.length) color=parts[0];
+  } else if(variant){
+    if(SIZE.test(variant)) size=variant; else product=(product+' '+variant).trim();
+  }
+  return {product:(product||variant||'(item)').trim(), color, size, partNo:sku, qty};
+}
+function importParsed(orders){
+  if(!orders.length){ toast('No orders found in that PDF'); return; }
+  const have=new Set(DB.map(l=>l.order+'|'+(l.partNo||l.product)+'|'+l.size));
+  const added=[]; let dup=0;
+  orders.forEach(o=>o.items.forEach(it=>{
+    const key=o.order+'|'+(it.partNo||it.product)+'|'+it.size;
+    if(have.has(key)){ dup++; return; } have.add(key);
+    const item={ id:'L'+Date.now()+'_'+Math.round(performance.now()*1000)+'_'+added.length,
+      order:o.order, customer:o.cust||'', email:o.email||'', phone:o.phone||'',
+      pref:o.pref||'', fulfill:'pickup', product:it.product, partNo:it.partNo||'',
+      color:it.color||'', size:it.size||'', qty:it.qty||1, status:'new', logo:'', po:'',
+      notes:o.note||'', addedAt:new Date().toISOString().slice(0,10), notifyLog:[], source:'pdf' };
+    DB.unshift(item); added.push(item);
+  }));
+  if(added.length) persistMany(added);
+  TAB='board'; FILTER='open'; save();
+  toast(added.length?`Imported ${added.length} item${added.length>1?'s':''}`+(dup?` · skipped ${dup} already in`:''):'Already imported (deduped)');
+}
+async function syncShopify(){
+  const st=document.getElementById('syncStatus'); if(st) st.textContent='Syncing…';
+  toast('Syncing from Shopify…');
+  try{
+    const r=await fetch(API+'/shopify',{method:'POST'});
+    if(r.status===401){ showLogin(); return; }
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ const m='Sync error: '+(d.detail||d.error||('HTTP '+r.status)); if(st) st.textContent=m; toast(m); return; }
+    lastSig=''; await loadState();
+    const m=`Synced — ${d.added} new, ${d.skipped} already in (${d.orders} b/o orders)`;
+    if(st) st.textContent=m; toast(m);
+  }catch(e){ const m='Sync failed — check connection'; if(st) st.textContent=m; toast(m); }
+}
+
+/* ---------------- settings ---------------- */
+function renderSettings(){
+  const s=settings();
+  document.getElementById('view').innerHTML = `
+    <div class="card">
+      <h2>Shop & messages</h2>
+      <div class="row"><div style="flex:1"><label>Shop name</label><input id="s_shop" value="${s.shop}"></div>
+        <div style="flex:1"><label>From email (replies)</label><input id="s_fromEmail" value="${s.fromEmail}"></div></div>
+      <label>Shop address (for pickup)</label><input id="s_shopAddr" value="${s.shopAddr}" placeholder="e.g. 123 Main St, St. Petersburg">
+      <label>Pickup message template</label>
+      <textarea id="s_pickupMsg" oninput="msgPreview()">${s.pickupMsg}</textarea>
+      <label>Shipping message template</label>
+      <textarea id="s_shipMsg" oninput="msgPreview()">${s.shipMsg}</textarea>
+      <p class="small muted">Placeholders: <code>{name}</code> <code>{item}</code> <code>{shop}</code> — filled in automatically per customer.</p>
+      <label>Live preview (example customer)</label>
+      <div id="msgPrev" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button class="btn" style="margin-top:12px" onclick="saveSet()">Save settings</button>
+    </div>
+    <div class="card">
+      <h2>Notifications (set up at deploy)</h2>
+      <div class="kv"><span>Email — Resend</span><span class="muted">verify domain → live</span></div>
+      <div class="kv"><span>Text — Twilio (A2P 10DLC)</span><span class="muted">register business → ~few days</span></div>
+      <p class="small muted">These get wired in when we deploy. Until then the Notify button records who you'd contact and logs it, so the workflow is testable now.</p>
+    </div>`;
+  msgPreview();
+}
+function fillMsg(t,shop){ return t.replace(/{name}/g,'Maria').replace(/{item}/g,'NCS Performance Polo K-5 (Navy, Youth M)').replace(/{shop}/g,shop||'your shop'); }
+function msgPreview(){
+  const shop=val('s_shop'); const bubble=(emoji,lab,txt)=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div class="small muted" style="margin-bottom:4px">${emoji} ${lab}</div>${txt}</div>`;
+  document.getElementById('msgPrev').innerHTML =
+    bubble('💬','Text / Email when picking up', fillMsg(document.getElementById('s_pickupMsg').value,shop)) +
+    bubble('📦','When shipping', fillMsg(document.getElementById('s_shipMsg').value,shop));
+}
+function saveSet(){
+  SETTINGS={shop:val('s_shop'),fromEmail:val('s_fromEmail'),shopAddr:val('s_shopAddr'),
+    pickupMsg:document.getElementById('s_pickupMsg').value,shipMsg:document.getElementById('s_shipMsg').value};
+  persistSettings(SETTINGS);
+  toast('Settings saved');
+}
+
+/* ---------------- modal / toast ---------------- */
+function modal(html){ document.getElementById('modal').innerHTML=html; document.getElementById('modalbg').classList.add('on'); }
+function closeModal(){ document.getElementById('modalbg').classList.remove('on'); }
+document.getElementById('modalbg').addEventListener('click',e=>{ if(e.target.id==='modalbg') closeModal(); });
+let toastT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',2200); }
+
+/* ---------------- order list ---------------- */
+function orderListRows(){
+  const need=DB.filter(l=>l.status==='new'); const map={};
+  need.forEach(l=>{
+    const key=(l.partNo||l.product)+'|'+l.color+'|'+l.size;
+    if(!map[key]) map[key]={product:l.product, partNo:l.partNo, color:l.color, size:l.size, qty:0, ids:[], orders:[]};
+    map[key].qty+=l.qty; map[key].ids.push(l.id); if(!map[key].orders.includes(l.order)) map[key].orders.push(l.order);
+  });
+  return Object.values(map).sort((a,b)=>(a.product+a.size).localeCompare(b.product+b.size));
+}
+function renderOrderList(){
+  const rows=orderListRows();
+  const totalQty=rows.reduce((s,r)=>s+r.qty,0);
+  let body=rows.map(r=>`<tr>
+    <td>${r.product}<div class="small muted">for ${r.orders.map(o=>'#'+o).join(', ')}</div></td>
+    <td>${r.partNo||'<span class="muted">—</span>'}</td>
+    <td>${r.color||'<span class="muted">—</span>'}</td>
+    <td>${r.size||'<span class="muted">—</span>'}</td>
+    <td class="right"><b>${r.qty}</b></td>
+    <td class="right"><button class="btn sm sec" onclick='markOrdered(${JSON.stringify(r.ids)})'>Mark ordered</button></td>
+  </tr>`).join('');
+  if(!rows.length) body=`<tr><td colspan="6" class="muted" style="text-align:center;padding:34px">Nothing to order right now.<br><span class="small">Back orders set to <b>Need to Order</b> show up here, combined by item.</span></td></tr>`;
+  document.getElementById('view').innerHTML=`
+    <div class="row" style="margin-bottom:6px">
+      <h2 style="margin:0">Order List <span class="muted" style="font-weight:400">— ${rows.length} item${rows.length!==1?'s':''}, ${totalQty} unit${totalQty!==1?'s':''} to buy</span></h2>
+      <div class="grow" style="flex:1"></div>
+      ${rows.length?`<button class="btn sec sm" onclick="printOrderList()">🖨 Print</button> <button class="btn sm" onclick='markOrdered(${JSON.stringify([].concat(...rows.map(r=>r.ids)))})'>Mark all ordered</button>`:''}
+    </div>
+    <p class="muted small" style="margin:0 0 14px">Everything from your back orders marked <b>Need to Order</b>, combined by item. Order it from your vendor, then mark it ordered — it moves to “On Order” on the board.</p>
+    <div class="card" style="padding:4px 0">
+      <table>
+        <thead><tr><th>Item</th><th>Part #</th><th>Color</th><th>Size</th><th class="right">Qty</th><th></th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+function markOrdered(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(Boolean); arr.forEach(l=>l.status='ordered'); persistMany(arr); save(); toast(`Moved ${arr.length} to On Order`); }
+function printOrderList(){
+  const rows=orderListRows();
+  const body=`<h1>Order List — Renegades Back Orders</h1><div class="sub">${new Date().toLocaleDateString()} · ${rows.length} items</div>
+    <table><thead><tr><th>Item</th><th>Part #</th><th>Color</th><th>Size</th><th>Qty</th><th>For orders</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.product}</td><td>${r.partNo||''}</td><td>${r.color||''}</td><td>${r.size||''}</td><td>${r.qty}</td><td>${r.orders.map(o=>'#'+o).join(', ')}</td></tr>`).join('')}
+    </tbody></table>`;
+  const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to print'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Order List</title><style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:24px;color:#111}h1{font-size:19px;margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #ddd}th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#555;border-bottom:2px solid #333}@media print{body{margin:0}}</style></head><body>${body}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ---------------- embroidery ---------------- */
+function renderEmbroidery(){
+  const items=DB.filter(l=>l.status==='embroidery');
+  const dl=`<datalist id="logolist">${allLogos().map(g=>`<option value="${g.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
+  let html;
+  if(!items.length){
+    html=`<div class="card"><p class="muted" style="text-align:center;padding:34px;margin:0">Nothing in embroidery right now.<br><span class="small">When an item arrives that needs a logo, hit <b>🧵 Embroidery</b> on the board and it shows up here, grouped by logo so you can batch them.</span></p></div>`;
+  } else {
+    const groups={}; items.forEach(l=>{ const k=l.logo||''; (groups[k]=groups[k]||[]).push(l); });
+    const keys=Object.keys(groups).sort((a,b)=> a===''?-1 : b===''?1 : a.localeCompare(b));
+    html=keys.map(k=>{
+      const g=groups[k]; const totalQty=g.reduce((s,l)=>s+l.qty,0);
+      const rows=g.map(l=>`<div class="erow">
+        <div style="flex:1;min-width:160px"><b>${l.product}</b><div class="small muted">${l.color} · ${l.size} · ×${l.qty} · #${l.order}${l.customer?' · '+l.customer:''}</div></div>
+        <input list="logolist" class="lgin ${l.logo?'':'needslogo'}" value="${(l.logo||'').replace(/"/g,'&quot;')}" placeholder="which logo?" onchange="setItemLogo('${l.id}',this.value)">
+        <button class="btn sm gh" onclick="embroidered('${l.id}')">✓ Done</button>
+      </div>`).join('');
+      const hdr = k ? `🧵 ${k}` : `⚠ Needs logo`;
+      const groupBtn = k ? `<div class="grow" style="flex:1"></div><button class="btn sm sec" onclick='groupDone(${JSON.stringify(g.map(l=>l.id))})'>Mark all ✓ Done</button>` : '';
+      return `<div class="card ${k?'':'needslogo'}" style="padding:0"><div class="ehdr"><b>${hdr}</b><span class="tag">${g.length} item${g.length!==1?'s':''} · ${totalQty} pc</span>${groupBtn}</div>${rows}</div>`;
+    }).join('');
+  }
+  document.getElementById('view').innerHTML=`
+    <div class="row" style="margin-bottom:6px"><h2 style="margin:0">Embroidery <span class="muted" style="font-weight:400">— ${items.length} item${items.length!==1?'s':''} waiting</span></h2></div>
+    <p class="muted small" style="margin:0 0 14px">Everything that's arrived and waiting to be stitched, <b>grouped by logo</b> so you can run them together. Set the logo (it remembers per product), embroider, then ✓ Done — the piece becomes <b>Ready</b> and moves to notify.</p>
+    ${dl}${html}`;
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  renderTabs();
+  ({board:renderBoard, orderlist:renderOrderList, embroidery:renderEmbroidery, import:renderImport, settings:renderSettings}[TAB])();
+}
+
+/* ---------------- boot: load from cloud, then poll for live sync + auto Shopify pull ---------------- */
+render(); // initial empty shell
+loadState();
+setInterval(()=>{ if(LOGGED_IN) loadState(); }, 5000);            // live multi-computer sync
+let didAutoSync=false;
+async function autoSync(){ if(LOGGED_IN){ await syncShopify().catch(()=>{}); } }
+setInterval(autoSync, 600000);                                    // auto-pull from Shopify every 10 min
+// kick one Shopify sync shortly after first successful login/load
+setInterval(()=>{ if(LOGGED_IN && !didAutoSync){ didAutoSync=true; autoSync(); } }, 3000);
+</script>
+</body>
+</html>
