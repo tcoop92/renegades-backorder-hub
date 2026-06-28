@@ -36,24 +36,28 @@ export default async function handler(req, res) {
   const storeRaw = process.env.SHOPIFY_STORE;
   const clientId = process.env.SHOPIFY_CLIENT_ID;
   const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
-  if (!storeRaw || !clientId || !clientSecret)
-    return res.status(500).json({ error: 'not configured', detail: 'Add SHOPIFY_STORE, SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET in Vercel, then redeploy.' });
+  const staticToken = process.env.SHOPIFY_TOKEN || process.env.SHOPIFY_ADMIN_TOKEN;
+  if (!storeRaw || (!staticToken && (!clientId || !clientSecret)))
+    return res.status(500).json({ error: 'not configured', detail: 'Add SHOPIFY_STORE plus either SHOPIFY_TOKEN (in-admin custom app) or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET in Vercel, then redeploy.' });
   const store = storeRaw.includes('.') ? storeRaw : storeRaw + '.myshopify.com';
 
-  // 1. exchange client id/secret for a short-lived access token
-  let token;
-  try {
-    const tr = await fetch(`https://${store}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret })
-    });
-    const raw = await tr.text();
-    let td = {}; try { td = JSON.parse(raw); } catch { /* non-JSON */ }
-    if (!tr.ok || !td.access_token)
-      return res.status(502).json({ error: 'auth failed', detail: 'Token exchange HTTP ' + tr.status + ' — ' + (raw || '(empty)').slice(0, 300) + ' — make sure the app is INSTALLED and read_orders + read_customers scopes are released.' });
-    token = td.access_token;
-  } catch (e) { return res.status(502).json({ error: 'auth error', detail: String((e && e.message) || e) }); }
+  // 1. get an access token. Prefer a static Admin API token (simplest — from an
+  //    in-admin "Develop apps" custom app). Otherwise exchange client id/secret.
+  let token = staticToken;
+  if (!token) {
+    try {
+      const tr = await fetch(`https://${store}/admin/oauth/access_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret })
+      });
+      const raw = await tr.text();
+      let td = {}; try { td = JSON.parse(raw); } catch { /* non-JSON */ }
+      if (!tr.ok || !td.access_token)
+        return res.status(502).json({ error: 'auth failed', detail: 'Token exchange HTTP ' + tr.status + ' — ' + (raw || '(empty)').slice(0, 300) + ' — make sure the app is INSTALLED and read_orders + read_customers scopes are released.' });
+      token = td.access_token;
+    } catch (e) { return res.status(502).json({ error: 'auth error', detail: String((e && e.message) || e) }); }
+  }
 
   // 2. pull recent orders (we filter to back orders by note below)
   let data;
