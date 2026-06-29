@@ -205,6 +205,12 @@ function needsContact(l){
   return false;
 }
 
+/* product → vendor style # (the blank you order), from the Renegades style-number sheet */
+const STYLES={"boysblendpantsblack":"1260","boysblendpantskhaki":"1260","boysblendpantsnavy":"1260","boysblendpullonpantskhaki":"1267","boysblendpullonpantsnavy":"1267","boysblendpullonshortskhaki":"1251","boysblendpullonshortsnavy":"1251","boysblendshorts":"1257","boysblendshortsblack":"1257","boysblendshortskhaki":"1257","boysblendshortsnavy":"1257","boysdrifitpantsblack":"1348","boysdrifitpantskhaki":"1348","boysdrifitpantsnavy":"1348","boysdrifitpullonshortskhaki":"1334","boysdrifitpullonshortsnavy":"1334","boysdrifitshortsblack":"1328","boysdrifitshortskhaki":"1328","boysdrifitshortsnavy":"1328","bvblendpolo":"5738","bvdrifitpolo":"5728","bvwomensblendpolo":"7720","bvwomensdrifitpolo":"5728","drifitpantskhaki":"1348","drifitpantsnavy":"1348","drifitpullonshortkhaki":"1334","drifitpullonshortnavy":"1334","ecsblenddoubleflapskort":"3923","ecsblendpullonpants":"1267","ecsboysblendpolo":"5738","ecsboysmensblendpants":"1260","ecsboysmensblendshorts":"1257","ecsboysmensdrifitpants":"1348","ecsdrifitdoubleflapskort":"3484","ecsdrifitpolo":"5728","ecsdropwaistpolodress":"7737","ecsgirlsblendpolo":"7720","ecsgirlsjuniorpants":"2526","ecsgirlsjuniorshorts":"2447","ecspeshirt":"7720","ecspeterpanblouse":"5540","ecspeterpandress":"2775","ecstoddlerskort":"2672","ecsunisexblendpullonshorts":"1251","ecsunisexdrifitpullonshorts":"1334","girlsbikershortsnavy":"4009","girlsblenddoubleflapskortblack":"3923","girlsblenddoubleflapskortkhaki":"3923","girlsblenddoubleflapskortnavy":"3923","girlsblendsingleflapskortkhaki":"3910","girlsblendsingleflapskortnavy":"3910","girlscapriskhaki":"2543","girlscaprisnavy":"2543","girlsdrifitdoubleflapskortblack":"3484","girlsdrifitdoubleflapskortkhaki":"3484","girlsdrifitdoubleflapskortnavy":"3484","girlspantsblack":"2526","girlspantskhaki":"2526","girlspantsnavy":"2526","girlsplaidsingleflapskortplaid":"1014","girlsshortsblack":"2447","girlsshortskhaki":"2447","girlsshortsnavy":"2447","girlstoddlerskortkhaki":"2672","girlstoddlerskortnavy":"2672","gospelbaptistblendpants":"1260","gospelbaptistblendpolo":"5738","gospelbaptistblendpullonpants":"1267","gospelbaptistblendpullonshorts":"1251","gospelbaptistdrifitpants":"1348","gospelbaptistdrifitpullonshorts":"1334","gospelbaptistpeterpandress":"2775","gospelbaptistskort":"2672","master1251":"1251","master1260":"1260","master1267":"1267","master1328":"1328","master1953":"1251","master2447":"2447","master2526":"2526","master2543":"2543","master2672":"2672","master2775":"2775","master3484":"3484","master3923":"3923","master5540":"5540","master5728":"5728","master5738":"5738","master6212":"6212","master7720":"7720","master7737":"7737","master7942":"1251","scagirlspeterpanblouse":"5540","setonblendpolo6th8th":"5738","setonblendpolok5th":"5738","setonboys6th8thblendpants":"1260","setonboys6th8thblendshorts":"1257","setonboys6th8thdrifitpants":"1348","setonboys6th8thdrifitshorts":"1328","setonboyskindergarten5thblendpants":"1260","setonboyskindergarten5thblendpullonpants":"1267","setonboyskindergarten5thblendpullonshorts":"1251","setonboyskindergarten5thblendshorts":"1257","setonboyskindergarten5thdrifitpants":"1348","setonboyskindergarten5thdrifitshorts":"1328","setondrifitpolo6th8th":"5728","setondrifitpolok5th":"5728","setongirls6th8thblenddoubleflapskort":"3923","setongirls6th8thdrifitdoubleflapskort":"3484","setongirls6th8thplaidsingleflapskort":"1014","setongirlskindergarten2ndbikershorts":"4009","setongirlskindergarten5thplaidsingleflapskort":"1014","setongirlspeterpandressk2nd":"2775","setonpeshirt":"7720","sfca14zipelectricnavypullover":"6133","sfca14zippullover":"6133","sfca6thgrade12thgradeblendpolo":"5738","sfcablenddoubleflapskort":"3923","sfcablendpolo":"5738","sfcaboysmensblendpants":"1260","sfcaboysmensblendshorts":"1257","sfcaboysmensdrifitpants":"1348","sfcaboysmensdrifitshorts":"1328","sfcadrifitdoubleflapskort":"3484","sfcadrifitelectricnavypolo":"5728","sfcadrifitpolo":"5728","sfcaelementarydrifitpolo":"5728","sfcagirlsblendpolo":"7720","sfcagirlsjuniorpants":"2526","sfcagirlsjuniorsshorts":"2447","sfcaladiesdrifitpolo":"5728","sfcapeterpandress":"2775","sfcaplaidsingleflapskort":"1014","sfcawomensdrifitelectricnavypolo":"5728","sfxbikershorts":"4009","sfxblendpolo":"5738","sfxboysmendrifitpants":"1348","sfxboysmensblendpants":"1260","sfxboysmensblendshorts":"1257","sfxboysmensdrifitpants":"1348","sfxboysmensdrifitshorts":"1328","sfxcrewsweatshirt":"1800","sfxdrifitpolo":"5728","sfxdropwaistpolodress":"7737","sfxfleecefullzipjacket":"1001","sfxfullziphoodie":"993","sfxgirlsjuniorspants":"2526","sfxpemissionshirt":"7720","sfxunisexblendpullonpants":"1267","sfxunisexblendpullonshorts":"1251","sfxunisexdrifitpullonshorts":"1334","smls14zippullover":"6133","smlsblenddoubleflapskort":"3923","smlsblendpolo":"5738","smlsblendsingleflapskort":"3910","smlsboyschapelshirt":"5738","smlsboysmenblendpants":"1260","smlsboysmendrifitpants":"1348","smlsboysmensblendshorts":"1257","smlsboysmensdrifitshorts":"1328","smlscrewsweatshirt":"1800","smlsdrifitdoubleflapskort":"3484","smlsdrifitpolo":"5728","smlsfleecefullzipjacket":"1001","smlsgirlschapelshirt":"7720","smlsgirlsjuniorshorts":"2447","smlsgirlswomenblendpolo":"7720","smlspeshirt":"7720","smlspeterpanblouse":"5540","smlspeterpandress":"2775","smlsplaidsingleflapskort":"1014"};
+function boNorm(t){ return (t||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+// vendor style # for an item: from the sheet by product name, else the Shopify SKU it came in with
+function styleOf(it){ return STYLES[boNorm(it.product)] || it.partNo || ''; }
+
 /* ---------------- tabs ---------------- */
 const TABS = [
   {id:'board', label:'Back Orders'},
@@ -262,7 +268,7 @@ function itemRow(i){
   if(i.status==='ordered') act=`<button class="btn sm gh" onclick="arrive('${i.id}','ready')">✓ Ready</button><button class="btn sm sec" onclick="arrive('${i.id}','embroidery')">🧵 Embroidery</button>`;
   else if(i.status==='embroidery') act=`<button class="btn sm sec" onclick="go('embroidery')">In embroidery →</button>`;
   return `<div class="irow">
-    <div class="iname"><b>${i.product}</b><div class="small muted">${i.color||'—'} · ${i.size||'—'} · ${i.partNo||'—'} · ×${i.qty}${i.status==='embroidery'&&i.logo?` · 🧵 ${i.logo}`:''}</div></div>
+    <div class="iname"><b>${i.product}</b><div class="small muted">${i.color||'—'} · ${i.size||'—'} · #${styleOf(i)||'—'} · ×${i.qty}${i.status==='embroidery'&&i.logo?` · 🧵 ${i.logo}`:''}</div></div>
     ${act}${statusSelect(i)}<button class="btn sm sec" onclick="openEdit('${i.id}')">Edit</button>
   </div>`;
 }
@@ -627,7 +633,7 @@ function orderListRows(){
   const need=DB.filter(l=>l.status==='new'); const map={};
   need.forEach(l=>{
     const key=(l.partNo||l.product)+'|'+l.color+'|'+l.size;
-    if(!map[key]) map[key]={product:l.product, partNo:l.partNo, color:l.color, size:l.size, qty:0, ids:[], orders:[]};
+    if(!map[key]) map[key]={product:l.product, partNo:styleOf(l), color:l.color, size:l.size, qty:0, ids:[], orders:[]};
     map[key].qty+=l.qty; map[key].ids.push(l.id); if(!map[key].orders.includes(l.order)) map[key].orders.push(l.order);
   });
   return Object.values(map).sort((a,b)=>(a.product+a.size).localeCompare(b.product+b.size));
@@ -653,7 +659,7 @@ function renderOrderList(){
     <p class="muted small" style="margin:0 0 14px">Everything from your back orders marked <b>Need to Order</b>, combined by item. Order it from your vendor, then mark it ordered — it moves to “On Order” on the board.</p>
     <div class="card" style="padding:4px 0">
       <table>
-        <thead><tr><th>Item</th><th>Part #</th><th>Color</th><th>Size</th><th class="right">Qty</th><th></th></tr></thead>
+        <thead><tr><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th class="right">Qty</th><th></th></tr></thead>
         <tbody>${body}</tbody>
       </table>
     </div>`;
@@ -662,7 +668,7 @@ function markOrdered(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(B
 function printOrderList(){
   const rows=orderListRows();
   const body=`<h1>Order List — Renegades Back Orders</h1><div class="sub">${new Date().toLocaleDateString()} · ${rows.length} items</div>
-    <table><thead><tr><th>Item</th><th>Part #</th><th>Color</th><th>Size</th><th>Qty</th><th>For orders</th></tr></thead><tbody>
+    <table><thead><tr><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th>Qty</th><th>For orders</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td>${r.product}</td><td>${r.partNo||''}</td><td>${r.color||''}</td><td>${r.size||''}</td><td>${r.qty}</td><td>${r.orders.map(o=>'#'+o).join(', ')}</td></tr>`).join('')}
     </tbody></table>`;
   const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to print'); return; }
