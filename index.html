@@ -151,7 +151,7 @@ let FILTER = 'open';
 
 /* default templates (editable in Settings) */
 const DEF_SETTINGS = {
-  shop:'Renegades Sportswear', shopAddr:'', fromEmail:'orders@renegadessportswear.com',
+  shop:'Renegades Sportswear', shopAddr:'', fromEmail:'orders@renegadesfl.com',
   pickupMsg:'Hi {name}, good news — your back-ordered {item} is now in and ready for pickup at {shop}. See you soon!',
   shipMsg:'Hi {name}, your back-ordered {item} just arrived and is heading out to you. We’ll send tracking shortly. Thanks for your patience!'
 };
@@ -368,29 +368,43 @@ function openNotifyOrder(order){
     </div>
     <label>Message (you can edit before sending)</label>
     <textarea id="notifyMsg">${msg}</textarea>
-    <div class="warn" style="margin-top:12px">Actual sending turns on once we connect Resend (email) &amp; Twilio (text). For now this logs the notification and marks the order done.</div>
+    <div class="warn" style="margin-top:12px">✉️ <b>Email sends for real now</b> (from renegadesfl.com). 💬 Text turns on once Twilio is set up — until then a text-only send won't go through.</div>
     <div class="row" style="justify-content:flex-end;margin-top:16px">
       <button class="btn sec" onclick="closeModal()">Cancel</button>
       <button class="btn gh" onclick="finishNotify('${order}')">Send & mark Notified</button>
     </div>`);
 }
-function finishNotify(order,viaCall){
+async function finishNotify(order,viaCall){
   const items=orderOpen(order).filter(l=>l.status==='ready');
-  let chans=['call'];
+  if(!items.length){ toast('Nothing ready to notify'); return; }
+  let logChans='call', finalToast='Logged call ✓';
   if(!viaCall){
     // persist any contact info typed in the popup to EVERY item on the order
     const nm=document.getElementById('n_name'), np=document.getElementById('n_phone'), ne=document.getElementById('n_email');
     orderItems(order).forEach(i=>{ if(nm&&nm.value.trim())i.customer=nm.value.trim(); if(np)i.phone=np.value.replace(/[^\d]/g,''); if(ne)i.email=ne.value.trim(); });
-    chans=[...document.querySelectorAll('#chanSeg span.on')].map(s=>s.dataset.c);
+    const chans=[...document.querySelectorAll('#chanSeg span.on')].map(s=>s.dataset.c);
     if(!chans.length){ toast('Pick at least one channel'); return; }
     const l=items[0];
     if(chans.includes('sms')&&!l.phone){ toast('Add a phone number to text'); return; }
     if(chans.includes('email')&&!l.email){ toast('Add an email address'); return; }
+    const msg=(document.getElementById('notifyMsg')||{}).value||'';
+    toast('Sending…');
+    let rz={};
+    try{
+      const r=await fetch(API+'/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({order, channels:chans, email:l.email, phone:l.phone, subject:`Your ${settings().shop} back order is ready`, message:msg})});
+      if(r.status===401){ showLogin(); return; }
+      rz=((await r.json().catch(()=>({})))||{}).results||{};
+    }catch(e){ toast('Send failed — check connection'); return; }
+    const sent=chans.filter(c=>rz[c]&&rz[c].ok), failed=chans.filter(c=>!(rz[c]&&rz[c].ok));
+    if(!sent.length){ toast('Could not send: '+((rz[chans[0]]&&rz[chans[0]].error)||'failed')); return; }
+    logChans=sent.join('+');
+    finalToast = failed.length ? `Sent via ${sent.join('+')} · ${failed.join('+')} failed` : `Sent ✓ — #${order}`;
   }
   const now=new Date().toISOString().slice(0,16).replace('T',' ');
-  items.forEach(i=>{ i.notifyLog.push({when:now, chan:chans.join('+'), to:[i.phone,i.email].filter(Boolean).join(' / ')||(i.phone||'—')}); i.status='notified'; });
+  items.forEach(i=>{ i.notifyLog.push({when:now, chan:logChans, to:[i.phone,i.email].filter(Boolean).join(' / ')||(i.phone||'—')}); i.status='notified'; });
   persistMany(orderItems(order)); // contact + status applied to the whole order
-  closeModal(); save(); toast(`Notified — ${items.length} item${items.length>1?'s':''} on #${order}`);
+  closeModal(); save(); toast(finalToast);
 }
 
 /* ---------------- edit / add ---------------- */
@@ -601,10 +615,10 @@ function renderSettings(){
       <button class="btn" style="margin-top:12px" onclick="saveSet()">Save settings</button>
     </div>
     <div class="card">
-      <h2>Notifications (set up at deploy)</h2>
-      <div class="kv"><span>Email — Resend</span><span class="muted">verify domain → live</span></div>
-      <div class="kv"><span>Text — Twilio (A2P 10DLC)</span><span class="muted">register business → ~few days</span></div>
-      <p class="small muted">These get wired in when we deploy. Until then the Notify button records who you'd contact and logs it, so the workflow is testable now.</p>
+      <h2>Notifications</h2>
+      <div class="kv"><span>Email — Resend</span><span style="color:var(--green)">✓ live (renegadesfl.com)</span></div>
+      <div class="kv"><span>Text — Twilio (A2P 10DLC)</span><span class="muted">pending registration</span></div>
+      <p class="small muted">Email sends for real. Texting goes live once the Twilio business registration clears, with no other changes.</p>
     </div>`;
   msgPreview();
 }
