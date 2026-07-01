@@ -692,24 +692,26 @@ function printOrderList(){
   w.document.close();
 }
 
-/* ---------------- 2.25in x 1.25in barcode pickup label → downloads a print-ready PDF ---------------- */
+/* ---------------- 2.25in x 1.25in pickup label → PDF: BIG job number + name below ---------------- */
 function printLabel(order){
   const g=DB.filter(l=>l.order===order); if(!g.length){ toast('Order not found'); return; }
   const name=(g[0].customer||'').trim()||'(no name)';
+  const num=String(order);
   try{
-    // 1. barcode → canvas (the order # shows under the bars)
-    const canvas=document.createElement('canvas');
-    JsBarcode(canvas, String(order), {format:'CODE128', displayValue:true, fontSize:22, textMargin:2, height:70, width:2, margin:6});
-    const img=canvas.toDataURL('image/png');
-    // 2. PDF at exactly 2.25in x 1.25in
     const { jsPDF }=window.jspdf;
     const doc=new jsPDF({ unit:'in', format:[2.25,1.25], orientation:'landscape' });
     const pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
-    let w=Math.min(pw-0.15, 2.0), h=w*(canvas.height/canvas.width);
-    if(h>0.62){ h=0.62; w=h*(canvas.width/canvas.height); }
-    doc.addImage(img,'PNG',(pw-w)/2, 0.08, w, h);
-    doc.setFont('helvetica','bold'); doc.setFontSize(name.length>20?12:15);
-    doc.text(name, pw/2, 0.08+h+0.24, { align:'center', maxWidth:pw-0.1 });
+    const nameFs = name.length>20?12:15;         // name stays a normal readable size
+    const nameBand = 0.30;                        // space reserved at the bottom for the name
+    const availW = pw-0.12, availH = ph-nameBand-0.06;
+    // job number: auto-size as large as it can while fitting width + height
+    doc.setFont('helvetica','bold'); doc.setFontSize(72);
+    const wRef = doc.getTextWidth(num) || 1;
+    let fs = Math.min(72*(availW/wRef), availH*100);  // fit width, then cap by height
+    doc.setFontSize(fs);
+    doc.text(num, pw/2, (ph-nameBand)/2, { align:'center', baseline:'middle' });
+    doc.setFont('helvetica','bold'); doc.setFontSize(nameFs);
+    doc.text(name, pw/2, ph-0.10, { align:'center', maxWidth:pw-0.1 });
     doc.save(`label-${order}.pdf`);
     toast('Label downloaded ⬇');
   }catch(e){ console.error(e); toast('Could not make label'); }
