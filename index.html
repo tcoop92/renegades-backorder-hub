@@ -115,6 +115,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 /* ---------------- sample data ---------------- */
@@ -691,31 +692,27 @@ function printOrderList(){
   w.document.close();
 }
 
-/* ---------------- 2.25in x 1.25in barcode pickup label (order # + name) ---------------- */
-function labelSvg(order){
-  try{
-    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    JsBarcode(svg, String(order), {format:'CODE128', displayValue:true, fontSize:16, textMargin:1, height:42, width:2, margin:0});
-    return svg.outerHTML;
-  }catch(e){ return '<div style="font-size:22pt;font-weight:700">#'+order+'</div>'; }
-}
+/* ---------------- 2.25in x 1.25in barcode pickup label → downloads a print-ready PDF ---------------- */
 function printLabel(order){
   const g=DB.filter(l=>l.order===order); if(!g.length){ toast('Order not found'); return; }
-  const name=((g[0].customer||'').trim()||'(no name)').replace(/[<&]/g, c=>c==='<'?'&lt;':'&amp;');
-  const w=window.open('','_blank','width=360,height=240'); if(!w){ toast('Allow pop-ups to print labels'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Label #${order}</title><style>
-    @page{ size:2.25in 1.25in; margin:0; }
-    html,body{ margin:0; padding:0; }
-    .lab{ width:2.25in; height:1.25in; box-sizing:border-box; padding:0.05in; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:Arial,Helvetica,sans-serif; overflow:hidden; }
-    .bc{ width:100%; text-align:center; line-height:0; }
-    .bc svg{ max-width:2.12in; max-height:0.6in; height:auto; }
-    .nm{ font-weight:700; font-size:15pt; line-height:1.03; text-align:center; margin-top:3pt; width:2.15in; word-break:break-word; }
-    @media print{ html,body{ width:2.25in; height:1.25in; } }
-  </style></head><body>
-    <div class="lab"><div class="bc">${labelSvg(order)}</div><div class="nm">${name}</div></div>
-    <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 80); }<\/script>
-  </body></html>`);
-  w.document.close();
+  const name=(g[0].customer||'').trim()||'(no name)';
+  try{
+    // 1. barcode → canvas (the order # shows under the bars)
+    const canvas=document.createElement('canvas');
+    JsBarcode(canvas, String(order), {format:'CODE128', displayValue:true, fontSize:22, textMargin:2, height:70, width:2, margin:6});
+    const img=canvas.toDataURL('image/png');
+    // 2. PDF at exactly 2.25in x 1.25in
+    const { jsPDF }=window.jspdf;
+    const doc=new jsPDF({ unit:'in', format:[2.25,1.25], orientation:'landscape' });
+    const pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
+    let w=Math.min(pw-0.15, 2.0), h=w*(canvas.height/canvas.width);
+    if(h>0.62){ h=0.62; w=h*(canvas.width/canvas.height); }
+    doc.addImage(img,'PNG',(pw-w)/2, 0.08, w, h);
+    doc.setFont('helvetica','bold'); doc.setFontSize(name.length>20?12:15);
+    doc.text(name, pw/2, 0.08+h+0.24, { align:'center', maxWidth:pw-0.1 });
+    doc.save(`label-${order}.pdf`);
+    toast('Label downloaded ⬇');
+  }catch(e){ console.error(e); toast('Could not make label'); }
 }
 
 /* ---------------- embroidery ---------------- */
