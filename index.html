@@ -114,6 +114,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
 <script>
 if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 /* ---------------- sample data ---------------- */
@@ -288,7 +289,7 @@ function ordersHtml(){
       <div class="ohdr">
         <div><b>#${g.order}</b> · ${l0.customer||'<span class="muted">(no name)</span>'}${nc?' <span class="tag" style="background:rgba(231,161,59,.18);color:#f0c178">⚠ needs contact</span>':''}
           <div class="chan">${chanLabel(l0.pref)} · ${l0.fulfill==='pickup'?'🏬 Pickup':'📦 Ship'} · ${g.items.length} item${g.items.length>1?'s':''}${ageBadge(ageRef)}</div></div>
-        <div class="grow" style="flex:1"></div>${prog}${notifyBtn}
+        <div class="grow" style="flex:1"></div>${prog}<button class="btn sm sec" onclick="printLabel('${g.order}')">🏷 Label</button>${notifyBtn}
       </div>
       ${g.items.map(itemRow).join('')}
     </div>`;
@@ -687,6 +688,33 @@ function printOrderList(){
     </tbody></table>`;
   const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to print'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Order List</title><style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:24px;color:#111}h1{font-size:19px;margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #ddd}th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#555;border-bottom:2px solid #333}@media print{body{margin:0}}</style></head><body>${body}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ---------------- 2.25in x 1.25in barcode pickup label (order # + name) ---------------- */
+function labelSvg(order){
+  try{
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    JsBarcode(svg, String(order), {format:'CODE128', displayValue:true, fontSize:16, textMargin:1, height:42, width:2, margin:0});
+    return svg.outerHTML;
+  }catch(e){ return '<div style="font-size:22pt;font-weight:700">#'+order+'</div>'; }
+}
+function printLabel(order){
+  const g=DB.filter(l=>l.order===order); if(!g.length){ toast('Order not found'); return; }
+  const name=((g[0].customer||'').trim()||'(no name)').replace(/[<&]/g, c=>c==='<'?'&lt;':'&amp;');
+  const w=window.open('','_blank','width=360,height=240'); if(!w){ toast('Allow pop-ups to print labels'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Label #${order}</title><style>
+    @page{ size:2.25in 1.25in; margin:0; }
+    html,body{ margin:0; padding:0; }
+    .lab{ width:2.25in; height:1.25in; box-sizing:border-box; padding:0.05in; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:Arial,Helvetica,sans-serif; overflow:hidden; }
+    .bc{ width:100%; text-align:center; line-height:0; }
+    .bc svg{ max-width:2.12in; max-height:0.6in; height:auto; }
+    .nm{ font-weight:700; font-size:15pt; line-height:1.03; text-align:center; margin-top:3pt; width:2.15in; word-break:break-word; }
+    @media print{ html,body{ width:2.25in; height:1.25in; } }
+  </style></head><body>
+    <div class="lab"><div class="bc">${labelSvg(order)}</div><div class="nm">${name}</div></div>
+    <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 80); }<\/script>
+  </body></html>`);
   w.document.close();
 }
 
