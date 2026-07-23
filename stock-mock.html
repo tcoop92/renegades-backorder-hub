@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Alerts — prototype</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--txt:#e8eaee;--mut:#9aa3b2;--acc:#4f8cff;
+    --green:#37b86a;--amber:#e7a13b;--red:#e2544a;--chip:#222733;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header .sub{color:var(--mut);font-size:12px}
+  .grow{flex:1}
+  main{padding:16px 18px;max-width:1180px;margin:0 auto}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+  .stat .n{font-size:22px;font-weight:800;line-height:1}
+  .stat .l{font-size:11px;color:var(--mut);margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
+  .stat.red .n{color:var(--red)} .stat.yel .n{color:var(--amber)}
+  .bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .chip{padding:5px 13px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mut)}
+  .chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .chip b{opacity:.7;font-weight:600;margin-left:4px}
+  .subtabs{display:flex;gap:6px;margin:0 0 14px}
+  .subtab{padding:8px 16px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;font-weight:700;font-size:13px;color:var(--mut)}
+  .subtab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .subtab .b{display:inline-block;min-width:18px;text-align:center;margin-left:6px;background:rgba(255,255,255,.18);border-radius:10px;padding:0 6px;font-size:11px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+  .schead{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin:16px 2px 8px}
+  .prow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer}
+  .prow:first-child{border-top:0}
+  .prow:hover{background:var(--panel2)}
+  .prow .pname{flex:1;font-weight:600}
+  .prow .pmeta{font-size:12px;color:var(--mut)}
+  .caret{color:var(--mut);transition:.15s;font-size:12px}
+  .prow.open .caret{transform:rotate(90deg)}
+  .sizes{padding:2px 14px 12px 14px;background:#12151c}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--mut);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
+  td.r,th.r{text-align:right}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800}
+  .p-red{background:rgba(226,84,74,.18);color:#f0a39c}
+  .p-yel{background:rgba(231,161,59,.18);color:#f0c178}
+  .p-ok{background:rgba(55,184,106,.14);color:#84d8a6}
+  .flagdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;vertical-align:middle}
+  .muted{color:var(--mut)}
+  .pctcell{font-weight:700}
+</style></head>
+<body>
+<header>
+  <h1>📦 Stock Alerts</h1><span class="sub">prototype · sample data</span>
+  <div class="grow"></div>
+  <span class="sub" id="counts"></span>
+</header>
+<main>
+  <div class="bar" id="schoolbar"></div>
+  <div class="subtabs" id="subtabs"></div>
+  <div id="view"></div>
+</main>
+<script>
+/* ---- flag thresholds: % = on-hand / sold-last-year ---- */
+function pctOf(v){ return v.sold>0 ? v.onhand/v.sold*100 : null; }        // null = never sold (ignore)
+function flagOf(v){ const p=pctOf(v); if(p===null) return 'na'; if(p<=15) return 'red'; if(p<=20) return 'yel'; return 'ok'; }
+const PILL={red:'p-red',yel:'p-yel',ok:'p-ok',na:'p-ok'};
+const DOT={red:'var(--red)',yel:'var(--amber)',ok:'var(--green)',na:'var(--mut)'};
+
+/* ---- sample data (real numbers where I have them: ECS polo is your actual per-size) ---- */
+const DATA=[
+ {school:'Bottoms', product:'Girls Pants — Khaki', vars:[
+   ['Khaki','4',0,38],['Khaki','5',0,41],['Khaki','6',1,55],['Khaki','7',0,48],
+   ['Khaki','8',0,52],['Khaki','10',1,44],['Khaki','12',0,36],['Khaki','14',0,66]]},
+ {school:'Bottoms', product:'Girls Shorts — Khaki', vars:[
+   ['Khaki','6',0,14],['Khaki','8',0,18],['Khaki','10',0,16],['Khaki','12',0,12],['Khaki','14',0,18]]},
+ {school:'Bottoms', product:'Boys Dri Fit Shorts — Black', vars:[
+   ['Black','YS',6,44],['Black','YM',9,70],['Black','YL',14,82],['Black','AS',22,60],
+   ['Black','AM',24,80],['Black','AL',12,75],['Black','AXL',12,80]]},
+ {school:'Bottoms', product:'Boys Dri Fit Pants — Navy', vars:[
+   ['Navy','6',3,29],['Navy','8',4,35],['Navy','10',2,20],['Navy','12',6,21],
+   ['Navy','14',5,17],['Navy','30x30',11,2],['Navy','32x32',5,3],['Navy','34x30',9,9]]},
+ {school:'ECS', product:'ECS Girls Blend Polo', vars:[
+   ['Heather','YXS',9,4],['Heather','YS',10,21],['Heather','YM',42,49],['Heather','YL',48,58],
+   ['Heather','YXL',30,36],['Heather','AS',24,34],['Heather','AM',21,27],['Heather','AL',13,9],['Heather','AXL',4,1]]},
+ {school:'ECS', product:'ECS Dri Fit Polo', vars:[
+   ['Grey','YS',5,26],['Grey','YM',3,31],['Grey','YL',10,40],['Grey','AS',7,22],['Grey','AM',13,45],['Grey','AL',8,30]]},
+ {school:'SFCA', product:'SFCA Girls Blend Polo', vars:[
+   ['Navy','YS',6,29],['Navy','YM',12,41],['Navy','YL',10,38],['Navy','AS',5,28],['Navy','AM',9,22],['Maroon','AM',4,20]]},
+ {school:'SMLS', product:'SMLS Blend Polo', vars:[
+   ['Red','YM',7,18],['Red','YL',9,20],['Red','AS',12,26],['Navy','AM',8,22],['White','AL',6,17]]},
+ {school:'BV', product:'BV Blend Polo', vars:[
+   ['White','AS',60,18],['White','AM',72,24],['Black','AL',55,20],['Yellow','AXL',48,12]]},
+ {school:'SFX', product:'SFX Dri Fit Polo', vars:[
+   ['Royal','YM',3,19],['Royal','YL',5,24],['Navy','AS',11,20],['Light Blue','AM',9,26]]},
+];
+// expand rows into variant objects
+DATA.forEach(p=>p.vars=p.vars.map(([color,size,onhand,sold])=>({color,size,onhand,sold})));
+
+const SCHOOLS=['All','Bottoms','BV','ECS','SFCA','SFX','SMLS','Seton'];
+let SCHOOL='All', SUB='alerts', OPEN={};
+
+function allFlagged(){
+  const out=[];
+  DATA.forEach(p=>p.vars.forEach(v=>{ const f=flagOf(v); if(f==='red'||f==='yel') out.push({school:p.school,product:p.product,...v,flag:f,pct:pctOf(v)}); }));
+  return out.sort((a,b)=>a.pct-b.pct);
+}
+function schoolFilter(list){ return SCHOOL==='All'?list:list.filter(x=>x.school===SCHOOL); }
+function prodFlag(p){ const fs=p.vars.map(flagOf); if(fs.includes('red'))return'red'; if(fs.includes('yel'))return'yel'; return'ok'; }
+
+function renderBar(){
+  document.getElementById('schoolbar').innerHTML=SCHOOLS.map(s=>{
+    const n = s==='All'? DATA.length : DATA.filter(p=>p.school===s).length;
+    return `<div class="chip ${SCHOOL===s?'on':''}" onclick="setSchool('${s}')">${s}${n?`<b>${n}</b>`:''}</div>`;
+  }).join('');
+}
+function setSchool(s){ SCHOOL=s; render(); }
+function setSub(s){ SUB=s; render(); }
+
+function renderSubtabs(){
+  const nAlerts=schoolFilter(allFlagged()).length;
+  document.getElementById('subtabs').innerHTML=
+    `<div class="subtab ${SUB==='alerts'?'on':''}" onclick="setSub('alerts')">🔴🟡 Alerts<span class="b">${nAlerts}</span></div>
+     <div class="subtab ${SUB==='all'?'on':''}" onclick="setSub('all')">All products</div>`;
+}
+function renderStats(){
+  const flagged=schoolFilter(allFlagged());
+  const red=flagged.filter(x=>x.flag==='red').length, yel=flagged.filter(x=>x.flag==='yel').length;
+  const prods=(SCHOOL==='All'?DATA:DATA.filter(p=>p.school===SCHOOL)).length;
+  document.getElementById('counts').textContent=`${red} red · ${yel} yellow`;
+  return `<div class="stats">
+    <div class="stat red"><div class="n">${red}</div><div class="l">Reorder now (≤15%)</div></div>
+    <div class="stat yel"><div class="n">${yel}</div><div class="l">Getting low (≤20%)</div></div>
+    <div class="stat"><div class="n">${prods}</div><div class="l">Products ${SCHOOL!=='All'?'· '+SCHOOL:''}</div></div>
+    <div class="stat"><div class="n">${flagged.length}</div><div class="l">Flagged variants</div></div>
+  </div>`;
+}
+function pctPill(v){ const f=flagOf(v),p=pctOf(v); return `<span class="pill ${PILL[f]}">${p===null?'—':Math.round(p)+'%'}</span>`; }
+
+function renderAlerts(){
+  const list=schoolFilter(allFlagged());
+  if(!list.length) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">No low-stock items ${SCHOOL!=='All'?'for '+SCHOOL:''}. 🎉</p></div>`;
+  return `<div class="card" style="padding:2px 0"><table>
+    <thead><tr><th></th><th>School</th><th>Product</th><th>Color</th><th>Size</th><th class="r">On hand</th><th class="r">Sold/yr</th><th class="r">% left</th></tr></thead>
+    <tbody>${list.map(x=>`<tr>
+      <td><span class="flagdot" style="background:${DOT[x.flag]}"></span></td>
+      <td>${x.school}</td><td>${x.product}</td><td>${x.color}</td><td><b>${x.size}</b></td>
+      <td class="r">${x.onhand}</td><td class="r">${x.sold}</td><td class="r pctcell" style="color:${DOT[x.flag]}">${Math.round(x.pct)}%</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function renderAll(){
+  const prods=SCHOOL==='All'?DATA:DATA.filter(p=>p.school===SCHOOL);
+  const bySchool={}; prods.forEach(p=>(bySchool[p.school]=bySchool[p.school]||[]).push(p));
+  const order=['Bottoms','BV','ECS','SFCA','SFX','SMLS','Seton'].filter(s=>bySchool[s]);
+  let html='';
+  for(const s of order){
+    html+=`<div class="schead">${s}</div><div class="card">`;
+    for(const p of bySchool[s]){
+      const oh=p.vars.reduce((a,v)=>a+v.onhand,0), sd=p.vars.reduce((a,v)=>a+v.sold,0);
+      const f=prodFlag(p), key=p.product, isOpen=OPEN[key];
+      const reds=p.vars.filter(v=>flagOf(v)==='red').length, yels=p.vars.filter(v=>flagOf(v)==='yel').length;
+      html+=`<div class="prow ${isOpen?'open':''}" onclick="toggle('${key.replace(/'/g,"\\'")}')">
+        <span class="caret">▶</span>
+        <div class="pname">${p.product}
+          <div class="pmeta">${oh} on hand · ${sd} sold/yr${reds?` · <span style="color:var(--red)">${reds} red</span>`:''}${yels?` · <span style="color:var(--amber)">${yels} yellow</span>`:''}</div></div>
+        <span class="pill ${PILL[f]}">${f==='red'?'🔴 reorder':f==='yel'?'🟡 low':'✓ ok'}</span>
+      </div>`;
+      if(isOpen){
+        html+=`<div class="sizes"><table>
+          <thead><tr><th>Color</th><th>Size</th><th class="r">On hand</th><th class="r">Sold/yr</th><th class="r">% left</th><th></th></tr></thead>
+          <tbody>${p.vars.map(v=>`<tr>
+            <td>${v.color}</td><td><b>${v.size}</b></td><td class="r">${v.onhand}</td><td class="r">${v.sold}</td>
+            <td class="r">${pctPill(v)}</td><td><span class="flagdot" style="background:${DOT[flagOf(v)]}"></span></td>
+          </tr>`).join('')}</tbody></table></div>`;
+      }
+    }
+    html+='</div>';
+  }
+  return html||'<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>';
+}
+function toggle(k){ OPEN[k]=!OPEN[k]; render(); }
+
+function render(){
+  renderBar(); renderSubtabs();
+  document.getElementById('view').innerHTML = renderStats() + (SUB==='alerts'?renderAlerts():renderAll());
+}
+render();
+</script>
+</body></html>

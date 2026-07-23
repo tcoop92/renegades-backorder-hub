@@ -188,6 +188,8 @@ const FLOW = ['new','ordered','embroidery','ready','notified','done'];
 function stClass(s){ return {new:'s-new',ordered:'s-ordered',embroidery:'s-embroidery',ready:'s-ready',notified:'s-notified',done:'s-done'}[s]; }
 function statusPill(s){ return `<span class="pill ${stClass(s)}">${STATUS[s]}</span>`; }
 function statusSelect(l){ return `<select class="stsel ${stClass(l.status)}" onchange="setStatus('${l.id}',this.value)">${FLOW.map(s=>`<option value="${s}" ${s===l.status?'selected':''}>${STATUS[s]}</option>`).join('')}</select>`; }
+const RESTOCK_FLOW = ['new','ordered','done'];
+function restockStatusSelect(l){ return `<select class="stsel ${stClass(l.status)}" onchange="setStatus('${l.id}',this.value)">${RESTOCK_FLOW.map(s=>`<option value="${s}" ${s===l.status?'selected':''}>${STATUS[s]}</option>`).join('')}</select>`; }
 function setStatus(id,v){ const l=DB.find(x=>x.id===id); if(!l||l.status===v) return; l.status=v; if(v==='embroidery'&&!l.logo&&PLOGOS[l.product]) l.logo=PLOGOS[l.product]; persist(l); save(); toast('Status → '+STATUS[v]); }
 // arrival fork: ready (no decoration) vs embroidery (needs logo)
 function arrive(id,to){ const l=DB.find(x=>x.id===id); if(!l) return; l.status=to; if(to==='embroidery'&&!l.logo&&PLOGOS[l.product]) l.logo=PLOGOS[l.product]; persist(l); save(); toast(to==='ready'?'Arrived — Ready':'Sent to Embroidery'); }
@@ -198,6 +200,8 @@ function embroidered(id){ const l=DB.find(x=>x.id===id); if(!l) return; l.status
 function groupDone(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(Boolean); arr.forEach(l=>l.status='ready'); persistMany(arr); save(); toast(`${arr.length} → Ready`); }
 function chanLabel(p){ return {email:'✉️ Email',sms:'💬 Text',both:'✉️💬 Both',call:'📞 Call','':'❓ Set contact'}[p]||p; }
 function isOpen(l){ return l.status!=='done'; }
+function isRestock(l){ return l.source==='restock'; }
+function orderKeys(){ return [...new Set(DB.filter(l=>!isRestock(l)).map(l=>l.order))]; }
 // a row "needs contact" if we can't actually reach them on their chosen channel
 function needsContact(l){
   if(!l.customer) return true;
@@ -222,7 +226,7 @@ const TABS = [
   {id:'settings', label:'Settings'},
 ];
 function renderTabs(){
-  const openOrders = [...new Set(DB.map(l=>l.order))].filter(o=>DB.some(l=>l.order===o&&isOpen(l))).length;
+  const openOrders = orderKeys().filter(o=>orderOpen(o).length).length;
   const toOrder = DB.filter(l=>l.status==='new').length;
   const emb = DB.filter(l=>l.status==='embroidery').length;
   const readyN = readyOrders().length;
@@ -245,13 +249,13 @@ function ageBadge(l){ if(!isOpen(l)) return ''; const d=daysWaiting(l); if(isNaN
   const c=d>=14?'var(--red)':d>=7?'var(--amber)':'var(--mut)';
   return ` <span class="tag" style="color:${c}">${d===0?'today':d===1?'1 day':d+' days'}</span>`; }
 /* ----- order helpers (board is grouped by order) ----- */
-function orderItems(o){ return DB.filter(l=>l.order===o); }
+function orderItems(o){ return DB.filter(l=>l.order===o && !isRestock(l)); }
 function orderOpen(o){ return orderItems(o).filter(isOpen); }
 function orderReadyToNotify(o){ const op=orderOpen(o); return op.length>0 && op.every(l=>l.status==='ready'); }
-function readyOrders(){ return [...new Set(DB.map(l=>l.order))].filter(orderReadyToNotify); }
+function readyOrders(){ return orderKeys().filter(orderReadyToNotify); }
 function oldestDate(items){ return items.reduce((m,i)=> i.addedAt<m?i.addedAt:m, '9999'); }
 function boOrders(){
-  const byOrder={}; DB.forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
+  const byOrder={}; DB.filter(l=>!isRestock(l)).forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
   let orders=Object.keys(byOrder).map(o=>({order:o, items:byOrder[o]}));
   orders=orders.filter(g=>{
     const open=g.items.some(isOpen);
@@ -274,10 +278,42 @@ function itemRow(i){
     ${act}${statusSelect(i)}<button class="btn sm sec" onclick="openEdit('${i.id}')">Edit</button>
   </div>`;
 }
+/* ----- restock (internal reorder list — no customer/order) ----- */
+function restockItems(){ return DB.filter(isRestock); }
+function restockRow(i){
+  let act='';
+  if(i.status==='new') act=`<button class="btn sm gh" onclick="setStatus('${i.id}','ordered')">Mark ordered</button>`;
+  else if(i.status==='ordered') act=`<button class="btn sm gh" onclick="setStatus('${i.id}','done')">✓ Came in</button>`;
+  return `<div class="irow">
+    <div class="iname"><b>${i.product||'<span class="muted">(item)</span>'}</b><div class="small muted">${i.color||'—'} · #${i.partNo||'—'} · ×${i.qty}</div></div>
+    ${act}${restockStatusSelect(i)}<button class="btn sm sec" onclick="openRestock('${i.id}')">Edit</button>
+  </div>`;
+}
+function restockCardHtml(){
+  if(FILTER==='ready') return '';
+  let items=restockItems();
+  if(FILTER==='open') items=items.filter(isOpen);
+  else if(FILTER==='done') items=items.filter(l=>!isOpen(l));
+  const q=SEARCH.trim().toLowerCase();
+  if(q) items=items.filter(l=>[l.product,l.partNo,l.color].join(' ').toLowerCase().includes(q));
+  if(!items.length) return '';
+  items.sort((a,b)=> (isOpen(b)?1:0)-(isOpen(a)?1:0) || (a.addedAt<b.addedAt?-1:1));
+  const openN=items.filter(isOpen).length;
+  return `<div class="card ocard">
+    <div class="ohdr">
+      <div><b>🔁 Restock</b> <span class="muted">— internal reorder list</span>
+        <div class="chan">${openN} item${openN!==1?'s':''} to order · added manually</div></div>
+      <div class="grow" style="flex:1"></div>
+      <button class="btn sm sec" onclick="addRestock()">+ Add</button>
+    </div>
+    ${items.map(restockRow).join('')}
+  </div>`;
+}
 function ordersHtml(){
+  const restock=restockCardHtml();
   const orders=boOrders();
-  if(!orders.length) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>`;
-  return orders.map(g=>{
+  if(!orders.length && !restock) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>`;
+  return restock + orders.map(g=>{
     const l0=g.items[0], open=g.items.filter(isOpen), readyN=g.items.filter(i=>i.status==='ready').length;
     const canNotify=orderReadyToNotify(g.order), allDone=!open.length;
     const nc=open.length&&needsContact(l0);
@@ -300,7 +336,7 @@ function fillBody(){ const b=document.getElementById('boBody'); if(b) b.innerHTM
 function applySearch(v){ SEARCH=v; fillBody(); }
 function renderBoard(){
   const cnt=s=>DB.filter(l=>l.status===s).length;
-  const allOrders=[...new Set(DB.map(l=>l.order))];
+  const allOrders=orderKeys();
   const openOrders=allOrders.filter(o=>orderOpen(o).length).length;
   const doneOrders=allOrders.filter(o=>!orderOpen(o).length).length;
   const readyOrd=readyOrders().length;
@@ -324,6 +360,7 @@ function renderBoard(){
       <input class="search" id="boSearch" placeholder="Search name, order, item…" value="${SEARCH.replace(/"/g,'&quot;')}" oninput="applySearch(this.value)">
       <button class="btn sm sec" onclick="go('import')">+ Import PDF</button>
       <button class="btn sm sec" onclick="addManual()">+ Add manually</button>
+      <button class="btn sm sec" onclick="addRestock()">🔁 Add Restock</button>
     </div>
     <div id="boBody">${ordersHtml()}</div>`;
 }
@@ -455,6 +492,32 @@ function saveLine(id,isNew){
   persist(item); closeModal(); save(); toast('Saved');
 }
 function delLine(id){ DB=DB.filter(x=>x.id!==id); persistDelete(id); closeModal(); save(); toast('Deleted'); }
+/* ----- restock add/edit ----- */
+function addRestock(){ restockForm({id:'R'+Date.now(), product:'', partNo:'', color:'', qty:1, _new:true}); }
+function openRestock(id){ restockForm(DB.find(x=>x.id===id)); }
+function restockForm(l){
+  const e=s=>(s||'').replace(/"/g,'&quot;');
+  modal(`
+    <h3>${l._new?'🔁 Add restock':'Edit restock'}</h3>
+    <p class="muted small" style="margin:0 0 12px">Something you're low on and want to order with the next order. It'll show on the Order List and on the board under Restock.</p>
+    <label>What is it?</label><input id="r_product" value="${e(l.product)}" placeholder="e.g. Dri-Fit Polo">
+    <div class="row"><div style="flex:1"><label>Part #</label><input id="r_partNo" value="${e(l.partNo)}" placeholder="e.g. 1348"></div>
+      <div style="flex:1"><label>Color</label><input id="r_color" value="${e(l.color)}" placeholder="e.g. Navy"></div>
+      <div style="width:80px"><label>Qty</label><input id="r_qty" type="number" min="1" value="${l.qty||1}"></div></div>
+    <div class="row" style="justify-content:space-between;margin-top:16px">
+      ${l._new?'<span></span>':`<button class="btn sec" style="background:rgba(226,84,74,.15);border-color:rgba(226,84,74,.4);color:#f0a39c" onclick="delLine('${l.id}')">Delete</button>`}
+      <div class="row"><button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveRestock('${l.id}',${!!l._new})">Save</button></div>
+    </div>`);
+}
+function saveRestock(id,isNew){
+  const data={product:val('r_product'), partNo:val('r_partNo'), color:val('r_color'), qty:+val('r_qty')||1};
+  if(!data.product && !data.partNo){ toast('Add at least a name or part #'); return; }
+  let item;
+  if(isNew){ item=Object.assign({id, source:'restock', order:'', customer:'', email:'', phone:'', pref:'', fulfill:'', size:'', status:'new', logo:'', po:'', notes:'', addedAt:new Date().toISOString().slice(0,10), notifyLog:[]}, data); DB.unshift(item); }
+  else { item=Object.assign(DB.find(x=>x.id===id), data); }
+  persist(item); closeModal(); save(); toast(isNew?'Restock added':'Saved');
+}
 
 /* ---------------- import (Shopify sync + PDF parser) ---------------- */
 function renderImport(){
@@ -649,16 +712,24 @@ function orderListRows(){
   const need=DB.filter(l=>l.status==='new'); const map={};
   need.forEach(l=>{
     const key=(l.partNo||l.product)+'|'+l.color+'|'+l.size;
-    if(!map[key]) map[key]={product:l.product, partNo:styleOf(l), color:l.color, size:l.size, qty:0, ids:[], orders:[]};
-    map[key].qty+=l.qty; map[key].ids.push(l.id); if(!map[key].orders.includes(l.order)) map[key].orders.push(l.order);
+    if(!map[key]) map[key]={product:l.product, partNo:styleOf(l), color:l.color, size:l.size, qty:0, ids:[], orders:[], restock:false};
+    map[key].qty+=l.qty; map[key].ids.push(l.id);
+    if(isRestock(l)) map[key].restock=true;
+    else if(l.order && !map[key].orders.includes(l.order)) map[key].orders.push(l.order);
   });
   return Object.values(map).sort((a,b)=>(a.product+a.size).localeCompare(b.product+b.size));
+}
+function orderListSrc(r){
+  const os=r.orders.map(o=>'#'+o);
+  if(os.length && r.restock) return 'for '+os.join(', ')+' · 🔁 Restock';
+  if(r.restock) return '🔁 Restock';
+  return os.length ? 'for '+os.join(', ') : '';
 }
 function renderOrderList(){
   const rows=orderListRows();
   const totalQty=rows.reduce((s,r)=>s+r.qty,0);
   let body=rows.map(r=>`<tr>
-    <td>${r.product}<div class="small muted">for ${r.orders.map(o=>'#'+o).join(', ')}</div></td>
+    <td>${r.product}<div class="small muted">${orderListSrc(r)}</div></td>
     <td>${r.partNo||'<span class="muted">—</span>'}</td>
     <td>${r.color||'<span class="muted">—</span>'}</td>
     <td>${r.size||'<span class="muted">—</span>'}</td>
@@ -685,7 +756,7 @@ function printOrderList(){
   const rows=orderListRows();
   const body=`<h1>Order List — Renegades Back Orders</h1><div class="sub">${new Date().toLocaleDateString()} · ${rows.length} items</div>
     <table><thead><tr><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th>Qty</th><th>For orders</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.product}</td><td>${r.partNo||''}</td><td>${r.color||''}</td><td>${r.size||''}</td><td>${r.qty}</td><td>${r.orders.map(o=>'#'+o).join(', ')}</td></tr>`).join('')}
+    ${rows.map(r=>`<tr><td>${r.product}</td><td>${r.partNo||''}</td><td>${r.color||''}</td><td>${r.size||''}</td><td>${r.qty}</td><td>${r.restock?(r.orders.length?r.orders.map(o=>'#'+o).join(', ')+', Restock':'Restock'):r.orders.map(o=>'#'+o).join(', ')}</td></tr>`).join('')}
     </tbody></table>`;
   const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to print'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Order List</title><style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:24px;color:#111}h1{font-size:19px;margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #ddd}th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#555;border-bottom:2px solid #333}@media print{body{margin:0}}</style></head><body>${body}<script>window.onload=function(){window.print();}<\/script></body></html>`);
