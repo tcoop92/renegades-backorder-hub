@@ -244,6 +244,7 @@ function go(t){ TAB=t; render(); }
 
 /* ---------------- board ---------------- */
 let SEARCH='';
+let POSEL=new Set(); let OL_ROWS=[];
 function daysWaiting(l){ return Math.floor((Date.now()-new Date(l.addedAt+'T00:00:00').getTime())/86400000); }
 function ageBadge(l){ if(!isOpen(l)) return ''; const d=daysWaiting(l); if(isNaN(d)||d<0) return '';
   const c=d>=14?'var(--red)':d>=7?'var(--amber)':'var(--mut)';
@@ -712,7 +713,7 @@ function orderListRows(){
   const need=DB.filter(l=>l.status==='new'); const map={};
   need.forEach(l=>{
     const key=(l.partNo||l.product)+'|'+l.color+'|'+l.size;
-    if(!map[key]) map[key]={product:l.product, partNo:styleOf(l), color:l.color, size:l.size, qty:0, ids:[], orders:[], restock:false};
+    if(!map[key]) map[key]={key, product:l.product, partNo:styleOf(l), color:l.color, size:l.size, qty:0, ids:[], orders:[], restock:false};
     map[key].qty+=l.qty; map[key].ids.push(l.id);
     if(isRestock(l)) map[key].restock=true;
     else if(l.order && !map[key].orders.includes(l.order)) map[key].orders.push(l.order);
@@ -727,8 +728,11 @@ function orderListSrc(r){
 }
 function renderOrderList(){
   const rows=orderListRows();
+  OL_ROWS=rows;
+  POSEL=new Set([...POSEL].filter(k=>rows.some(r=>r.key===k)));
   const totalQty=rows.reduce((s,r)=>s+r.qty,0);
-  let body=rows.map(r=>`<tr>
+  let body=rows.map((r,i)=>`<tr>
+    <td class="right" style="width:34px"><input type="checkbox" class="pochk" ${POSEL.has(r.key)?'checked':''} onchange="poToggle(${i},this.checked)"></td>
     <td>${r.product}<div class="small muted">${orderListSrc(r)}</div></td>
     <td>${r.partNo||'<span class="muted">—</span>'}</td>
     <td>${r.color||'<span class="muted">—</span>'}</td>
@@ -736,22 +740,91 @@ function renderOrderList(){
     <td class="right"><b>${r.qty}</b></td>
     <td class="right"><button class="btn sm sec" onclick='markOrdered(${JSON.stringify(r.ids)})'>Mark ordered</button></td>
   </tr>`).join('');
-  if(!rows.length) body=`<tr><td colspan="6" class="muted" style="text-align:center;padding:34px">Nothing to order right now.<br><span class="small">Back orders set to <b>Need to Order</b> show up here, combined by item.</span></td></tr>`;
+  if(!rows.length) body=`<tr><td colspan="7" class="muted" style="text-align:center;padding:34px">Nothing to order right now.<br><span class="small">Back orders set to <b>Need to Order</b> show up here, combined by item.</span></td></tr>`;
   document.getElementById('view').innerHTML=`
     <div class="row" style="margin-bottom:6px">
       <h2 style="margin:0">Order List <span class="muted" style="font-weight:400">— ${rows.length} item${rows.length!==1?'s':''}, ${totalQty} unit${totalQty!==1?'s':''} to buy</span></h2>
       <div class="grow" style="flex:1"></div>
-      ${rows.length?`<button class="btn sec sm" onclick="printOrderList()">🖨 Print</button> <button class="btn sm" onclick='markOrdered(${JSON.stringify([].concat(...rows.map(r=>r.ids)))})'>Mark all ordered</button>`:''}
+      ${rows.length?`<button class="btn sec sm" onclick="printOrderList()">🖨 Print</button> <button class="btn sm" id="poGenBtn" disabled onclick="openPO()">🧾 Generate PO</button> <button class="btn sec sm" onclick='markOrdered(${JSON.stringify([].concat(...rows.map(r=>r.ids)))})'>Mark all ordered</button>`:''}
     </div>
-    <p class="muted small" style="margin:0 0 14px">Everything from your back orders marked <b>Need to Order</b>, combined by item. Order it from your vendor, then mark it ordered — it moves to “On Order” on the board.</p>
+    <p class="muted small" style="margin:0 0 14px">Everything marked <b>Need to Order</b>, combined by item. Check off the ones you're ordering and hit <b>Generate PO</b>, or mark them ordered to move them to “On Order” on the board.</p>
     <div class="card" style="padding:4px 0">
       <table>
-        <thead><tr><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th class="right">Qty</th><th></th></tr></thead>
+        <thead><tr><th style="width:34px" class="right"><input type="checkbox" id="poAll" onchange="poToggleAll(this.checked)"></th><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th class="right">Qty</th><th></th></tr></thead>
         <tbody>${body}</tbody>
       </table>
     </div>`;
+  poRefresh();
 }
 function markOrdered(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(Boolean); arr.forEach(l=>l.status='ordered'); persistMany(arr); save(); toast(`Moved ${arr.length} to On Order`); }
+/* ----- PO selection + generate ----- */
+function poSelectedRows(){ return OL_ROWS.filter(r=>POSEL.has(r.key)); }
+function poToggle(i,checked){ const r=OL_ROWS[i]; if(!r) return; if(checked) POSEL.add(r.key); else POSEL.delete(r.key); poRefresh(); }
+function poToggleAll(checked){ POSEL=new Set(checked?OL_ROWS.map(r=>r.key):[]); renderOrderList(); }
+function poRefresh(){
+  const n=poSelectedRows().length;
+  const b=document.getElementById('poGenBtn'); if(b){ b.disabled=!n; b.textContent='🧾 Generate PO'+(n?` (${n})`:''); }
+  const all=document.getElementById('poAll'); if(all){ all.checked=n>0&&n===OL_ROWS.length; all.indeterminate=n>0&&n<OL_ROWS.length; }
+}
+function openPO(){
+  const sel=poSelectedRows();
+  if(!sel.length){ toast('Check off at least one item'); return; }
+  const defPo='PO-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const totalQty=sel.reduce((s,r)=>s+r.qty,0);
+  modal(`
+    <h3>🧾 Generate Purchase Order</h3>
+    <p class="muted small" style="margin:0 0 12px">${sel.length} item${sel.length!==1?'s':''} · ${totalQty} unit${totalQty!==1?'s':''} selected.</p>
+    <label>Vendor</label><input id="po_vendor" placeholder="e.g. Augusta Sportswear">
+    <div class="row"><div style="flex:1"><label>PO #</label><input id="po_num" value="${defPo}"></div></div>
+    <label>Ship to</label><textarea id="po_shipto">Renegades Sportswear
+17051 Jean Street, 10
+Fort Myers, FL 33967
+(727) 278-6196</textarea>
+    <label>Notes (optional)</label><textarea id="po_notes" placeholder="Account #, delivery instructions, etc."></textarea>
+    <label class="row" style="gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" id="po_mark" checked> <span class="small">Also mark these items as “On Order” after creating the PO</span></label>
+    <div class="row" style="justify-content:flex-end;margin-top:16px;gap:8px">
+      <button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="makePO()">Open PO ↗</button>
+    </div>`);
+}
+function makePO(){
+  const sel=poSelectedRows();
+  if(!sel.length){ toast('Nothing selected'); closeModal(); return; }
+  const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const vendor=val('po_vendor'), num=val('po_num'), notes=val('po_notes');
+  const shipto=document.getElementById('po_shipto').value.trim();
+  const mark=document.getElementById('po_mark').checked;
+  const totalQty=sel.reduce((s,r)=>s+r.qty,0);
+  const rowsHtml=sel.map(r=>`<tr><td>${esc(r.product)}</td><td>${esc(r.partNo)}</td><td>${esc(r.color)}</td><td>${esc(r.size)}</td><td class="c">${r.qty}</td><td></td><td></td></tr>`).join('');
+  const css=`body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:34px;color:#111}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:18px}
+    .hd h1{font-size:26px;letter-spacing:1.5px;margin:0}.hd .co{font-size:13px;color:#444;margin-top:4px}
+    .meta{text-align:right;font-size:13px;line-height:1.6}
+    .blocks{display:flex;gap:48px;margin-bottom:20px;font-size:13px;line-height:1.5}
+    .lab{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:3px}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+    th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #ddd}
+    th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#555;border-bottom:2px solid #333}
+    td.c,th.c{text-align:center}tfoot td{font-weight:700;border-top:2px solid #333;border-bottom:none}
+    .notes{margin-top:22px;font-size:12px;color:#333;white-space:pre-wrap}
+    @media print{body{margin:.5in}}`;
+  const body=`<div class="hd"><div><h1>PURCHASE ORDER</h1><div class="co">Renegades Sportswear</div></div>
+      <div class="meta"><div><b>PO #:</b> ${esc(num)||'—'}</div><div><b>Date:</b> ${new Date().toLocaleDateString()}</div></div></div>
+    <div class="blocks">
+      <div><div class="lab">Vendor</div>${esc(vendor)||'—'}</div>
+      <div><div class="lab">Ship to</div>${esc(shipto).replace(/\n/g,'<br>')||'—'}</div>
+    </div>
+    <table><thead><tr><th>Item</th><th>Style #</th><th>Color</th><th>Size</th><th class="c">Qty</th><th class="c">Unit Cost</th><th class="c">Line Total</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+      <tfoot><tr><td colspan="4">Total</td><td class="c">${totalQty}</td><td></td><td></td></tr></tfoot></table>
+    ${notes?`<div class="notes"><div class="lab">Notes</div>${esc(notes)}</div>`:''}`;
+  const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to open the PO'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(num)||'Purchase Order'}</title><style>${css}</style></head><body>${body}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+  closeModal();
+  if(mark){ const ids=[].concat(...sel.map(r=>r.ids)); POSEL=new Set(); markOrdered(ids); }
+  toast('Purchase order created');
+}
 function printOrderList(){
   const rows=orderListRows();
   const body=`<h1>Order List — Renegades Back Orders</h1><div class="sub">${new Date().toLocaleDateString()} · ${rows.length} items</div>
