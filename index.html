@@ -201,7 +201,8 @@ function groupDone(ids){ const arr=ids.map(id=>DB.find(x=>x.id===id)).filter(Boo
 function chanLabel(p){ return {email:'✉️ Email',sms:'💬 Text',both:'✉️💬 Both',call:'📞 Call','':'❓ Set contact'}[p]||p; }
 function isOpen(l){ return l.status!=='done'; }
 function isRestock(l){ return l.source==='restock'; }
-function orderKeys(){ return [...new Set(DB.filter(l=>!isRestock(l)).map(l=>l.order))]; }
+function isWatch(l){ return l.source==='watch'; }
+function orderKeys(){ return [...new Set(DB.filter(l=>!isRestock(l)&&!isWatch(l)).map(l=>l.order))]; }
 // a row "needs contact" if we can't actually reach them on their chosen channel
 function needsContact(l){
   if(!l.customer) return true;
@@ -221,6 +222,7 @@ function styleOf(it){ return STYLES[boNorm(it.product)] || it.partNo || ''; }
 const TABS = [
   {id:'board', label:'Back Orders'},
   {id:'orderlist', label:'Order List'},
+  {id:'watch', label:'👀 Look Into'},
   {id:'embroidery', label:'Embroidery'},
   {id:'import', label:'Import'},
   {id:'settings', label:'Settings'},
@@ -235,6 +237,7 @@ function renderTabs(){
     if(t.id==='board' && openOrders) b=`<span class="badge">${openOrders}</span>`;
     if(t.id==='orderlist' && toOrder) b=`<span class="badge">${toOrder}</span>`;
     if(t.id==='embroidery' && emb) b=`<span class="badge">${emb}</span>`;
+    if(t.id==='watch' && DB.filter(isWatch).length) b=`<span class="badge">${DB.filter(isWatch).length}</span>`;
     return `<div class="tab ${TAB===t.id?'on':''}" onclick="go('${t.id}')">${t.label}${b}</div>`;
   }).join('');
   document.getElementById('counts').textContent =
@@ -250,13 +253,13 @@ function ageBadge(l){ if(!isOpen(l)) return ''; const d=daysWaiting(l); if(isNaN
   const c=d>=14?'var(--red)':d>=7?'var(--amber)':'var(--mut)';
   return ` <span class="tag" style="color:${c}">${d===0?'today':d===1?'1 day':d+' days'}</span>`; }
 /* ----- order helpers (board is grouped by order) ----- */
-function orderItems(o){ return DB.filter(l=>l.order===o && !isRestock(l)); }
+function orderItems(o){ return DB.filter(l=>l.order===o && !isRestock(l) && !isWatch(l)); }
 function orderOpen(o){ return orderItems(o).filter(isOpen); }
 function orderReadyToNotify(o){ const op=orderOpen(o); return op.length>0 && op.every(l=>l.status==='ready'); }
 function readyOrders(){ return orderKeys().filter(orderReadyToNotify); }
 function oldestDate(items){ return items.reduce((m,i)=> i.addedAt<m?i.addedAt:m, '9999'); }
 function boOrders(){
-  const byOrder={}; DB.filter(l=>!isRestock(l)).forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
+  const byOrder={}; DB.filter(l=>!isRestock(l)&&!isWatch(l)).forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
   let orders=Object.keys(byOrder).map(o=>({order:o, items:byOrder[o]}));
   orders=orders.filter(g=>{
     const open=g.items.some(isOpen);
@@ -286,7 +289,7 @@ function restockRow(i){
   if(i.status==='new') act=`<button class="btn sm gh" onclick="setStatus('${i.id}','ordered')">Mark ordered</button>`;
   else if(i.status==='ordered') act=`<button class="btn sm gh" onclick="setStatus('${i.id}','done')">✓ Came in</button>`;
   return `<div class="irow">
-    <div class="iname"><b>${i.product||'<span class="muted">(item)</span>'}</b><div class="small muted">${i.color||'—'} · #${i.partNo||'—'} · ×${i.qty}</div></div>
+    <div class="iname"><b>${i.product||'<span class="muted">(item)</span>'}</b><div class="small muted">${i.color||'—'} · ${i.size||'—'} · #${i.partNo||'—'} · ×${i.qty}</div></div>
     ${act}${restockStatusSelect(i)}<button class="btn sm sec" onclick="openRestock('${i.id}')">Edit</button>
   </div>`;
 }
@@ -494,7 +497,7 @@ function saveLine(id,isNew){
 }
 function delLine(id){ DB=DB.filter(x=>x.id!==id); persistDelete(id); closeModal(); save(); toast('Deleted'); }
 /* ----- restock add/edit ----- */
-function addRestock(){ restockForm({id:'R'+Date.now(), product:'', partNo:'', color:'', qty:1, _new:true}); }
+function addRestock(){ restockForm({id:'R'+Date.now(), product:'', partNo:'', color:'', size:'', qty:1, _new:true}); }
 function openRestock(id){ restockForm(DB.find(x=>x.id===id)); }
 function restockForm(l){
   const e=s=>(s||'').replace(/"/g,'&quot;');
@@ -504,6 +507,7 @@ function restockForm(l){
     <label>What is it?</label><input id="r_product" value="${e(l.product)}" placeholder="e.g. Dri-Fit Polo">
     <div class="row"><div style="flex:1"><label>Part #</label><input id="r_partNo" value="${e(l.partNo)}" placeholder="e.g. 1348"></div>
       <div style="flex:1"><label>Color</label><input id="r_color" value="${e(l.color)}" placeholder="e.g. Navy"></div>
+      <div style="flex:1"><label>Size</label><input id="r_size" value="${e(l.size)}" placeholder="e.g. YM"></div>
       <div style="width:80px"><label>Qty</label><input id="r_qty" type="number" min="1" value="${l.qty||1}"></div></div>
     <div class="row" style="justify-content:space-between;margin-top:16px">
       ${l._new?'<span></span>':`<button class="btn sec" style="background:rgba(226,84,74,.15);border-color:rgba(226,84,74,.4);color:#f0a39c" onclick="delLine('${l.id}')">Delete</button>`}
@@ -512,12 +516,86 @@ function restockForm(l){
     </div>`);
 }
 function saveRestock(id,isNew){
-  const data={product:val('r_product'), partNo:val('r_partNo'), color:val('r_color'), qty:+val('r_qty')||1};
+  const data={product:val('r_product'), partNo:val('r_partNo'), color:val('r_color'), size:val('r_size'), qty:+val('r_qty')||1};
   if(!data.product && !data.partNo){ toast('Add at least a name or part #'); return; }
   let item;
   if(isNew){ item=Object.assign({id, source:'restock', order:'', customer:'', email:'', phone:'', pref:'', fulfill:'', size:'', status:'new', logo:'', po:'', notes:'', addedAt:new Date().toISOString().slice(0,10), notifyLog:[]}, data); DB.unshift(item); }
   else { item=Object.assign(DB.find(x=>x.id===id), data); }
   persist(item); closeModal(); save(); toast(isNew?'Restock added':'Saved');
+}
+
+/* ---------------- "Look Into" watch list (things to check — never hits the order list) ---------------- */
+function watchList(){ return DB.filter(isWatch).sort((a,b)=> a.addedAt<b.addedAt?1:-1); }
+function renderWatch(){
+  const items=watchList();
+  const rows=items.map(w=>{
+    const meta=[w.color,w.size].filter(Boolean).join(' · ')+(w.partNo?(w.color||w.size?' · ':'')+'#'+w.partNo:'');
+    return `<div class="card ocard">
+      <div class="ohdr">
+        <div><b>${w.product||'<span class="muted">(item)</span>'}</b>
+          ${meta?`<div class="chan">${meta}</div>`:''}
+          ${w.notes?`<div class="small muted" style="margin-top:4px">${w.notes}</div>`:''}</div>
+        <div class="grow" style="flex:1"></div>
+        <button class="btn sm" onclick="watchToRestock('${w.id}')">➕ Add to restock</button>
+        <button class="btn sm sec" onclick="openWatch('${w.id}')">Edit</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('view').innerHTML=`
+    <div class="row" style="margin-bottom:6px">
+      <h2 style="margin:0">Products to look into <span class="muted" style="font-weight:400">— things we might be low on</span></h2>
+      <div class="grow" style="flex:1"></div>
+      <button class="btn sm" onclick="addWatch()">+ Add product</button>
+    </div>
+    <p class="muted small" style="margin:0 0 14px">A running list of items to check on. These do <b>not</b> go on the Order List. When you decide to order one, hit <b>“➕ Add to restock”</b>, set a quantity, and it moves to your Restock list.</p>
+    ${items.length? rows : `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing to look into yet.<br><span class="small">Add products you think you're getting low on and want to check.</span></p></div>`}`;
+}
+function addWatch(){ watchForm({id:'W'+Date.now(), product:'', partNo:'', color:'', size:'', notes:'', _new:true}); }
+function openWatch(id){ watchForm(DB.find(x=>x.id===id)); }
+function watchForm(l){
+  const e=s=>(s||'').replace(/"/g,'&quot;');
+  modal(`
+    <h3>${l._new?'👀 Add product to look into':'Edit'}</h3>
+    <p class="muted small" style="margin:0 0 12px">Something you think you might be low on and want to check. It stays on this list until you decide to order it.</p>
+    <label>What is it?</label><input id="w_product" value="${e(l.product)}" placeholder="e.g. Youth Navy Hoodie">
+    <div class="row"><div style="flex:1"><label>Part # (optional)</label><input id="w_partNo" value="${e(l.partNo)}"></div>
+      <div style="flex:1"><label>Color (optional)</label><input id="w_color" value="${e(l.color)}"></div>
+      <div style="flex:1"><label>Size (optional)</label><input id="w_size" value="${e(l.size)}"></div></div>
+    <label>Note (optional)</label><textarea id="w_notes" placeholder="Why / what to check">${e(l.notes)}</textarea>
+    <div class="row" style="justify-content:space-between;margin-top:16px">
+      ${l._new?'<span></span>':`<button class="btn sec" style="background:rgba(226,84,74,.15);border-color:rgba(226,84,74,.4);color:#f0a39c" onclick="delLine('${l.id}')">Delete</button>`}
+      <div class="row"><button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveWatch('${l.id}',${!!l._new})">Save</button></div>
+    </div>`);
+}
+function saveWatch(id,isNew){
+  const data={product:val('w_product'), partNo:val('w_partNo'), color:val('w_color'), size:val('w_size'), notes:val('w_notes')};
+  if(!data.product){ toast('Add at least a name'); return; }
+  let item;
+  if(isNew){ item=Object.assign({id, source:'watch', order:'', customer:'', email:'', phone:'', pref:'', fulfill:'', qty:1, status:'watch', logo:'', po:'', addedAt:new Date().toISOString().slice(0,10), notifyLog:[]}, data); DB.unshift(item); }
+  else { item=Object.assign(DB.find(x=>x.id===id), data); }
+  persist(item); closeModal(); save(); toast(isNew?'Added to look-into list':'Saved');
+}
+function watchToRestock(id){
+  const w=DB.find(x=>x.id===id); if(!w) return;
+  const bits=[w.color,w.size].filter(Boolean).join(' · ');
+  modal(`
+    <h3>➕ Add to restock</h3>
+    <p class="muted small" style="margin:0 0 12px"><b>${w.product||'(item)'}</b>${bits?' · '+bits:''}${w.partNo?' · #'+w.partNo:''}</p>
+    <label>How many to order?</label><input id="w_qty" type="number" min="1" value="1">
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn sec" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="confirmWatchToRestock('${id}')">Add to restock</button>
+    </div>`);
+  setTimeout(()=>{ const q=document.getElementById('w_qty'); if(q){ q.focus(); q.select(); } },30);
+}
+function confirmWatchToRestock(id){
+  const w=DB.find(x=>x.id===id); if(!w) return;
+  const qty=+val('w_qty')||1;
+  const item={id:'R'+Date.now(), source:'restock', order:'', customer:'', email:'', phone:'', pref:'', fulfill:'', product:w.product, partNo:w.partNo, color:w.color, size:w.size, qty, status:'new', logo:'', po:'', notes:'', addedAt:new Date().toISOString().slice(0,10), notifyLog:[]};
+  DB.unshift(item); persist(item);
+  DB=DB.filter(x=>x.id!==id); persistDelete(id);
+  closeModal(); save(); toast('Added to restock ✓');
 }
 
 /* ---------------- import (Shopify sync + PDF parser) ---------------- */
@@ -892,7 +970,7 @@ function renderEmbroidery(){
 /* ---------------- render ---------------- */
 function render(){
   renderTabs();
-  ({board:renderBoard, orderlist:renderOrderList, embroidery:renderEmbroidery, import:renderImport, settings:renderSettings}[TAB])();
+  ({board:renderBoard, orderlist:renderOrderList, watch:renderWatch, embroidery:renderEmbroidery, import:renderImport, settings:renderSettings}[TAB])();
 }
 
 /* ---------------- boot: load from cloud, then poll for live sync + auto Shopify pull ---------------- */
