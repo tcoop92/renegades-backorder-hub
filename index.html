@@ -258,18 +258,27 @@ function orderOpen(o){ return orderItems(o).filter(isOpen); }
 function orderReadyToNotify(o){ const op=orderOpen(o); return op.length>0 && op.every(l=>l.status==='ready'); }
 function readyOrders(){ return orderKeys().filter(orderReadyToNotify); }
 function oldestDate(items){ return items.reduce((m,i)=> i.addedAt<m?i.addedAt:m, '9999'); }
+/* multi-term search: every word must appear somewhere in the item's text (any order, any field) */
+function searchTerms(q){ return (q||'').toLowerCase().split(/\s+/).filter(Boolean); }
+function matchAll(hay, terms){ hay=(hay||'').toLowerCase(); return terms.every(t=>hay.includes(t)); }
+function lineHay(l){ return [l.customer,l.product,l.partNo,styleOf(l),l.color,l.size,l.notes,l.logo,STATUS[l.status]||''].join(' '); }
+function orderHay(g){ return g.order+' '+g.items.map(lineHay).join(' '); }
 function boOrders(){
   const byOrder={}; DB.filter(l=>!isRestock(l)&&!isWatch(l)).forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
   let orders=Object.keys(byOrder).map(o=>({order:o, items:byOrder[o]}));
-  orders=orders.filter(g=>{
-    const open=g.items.some(isOpen);
-    if(FILTER==='open') return open;
-    if(FILTER==='ready') return orderReadyToNotify(g.order);
-    if(FILTER==='done') return !open;
-    return true;
-  });
-  const q=SEARCH.trim().toLowerCase();
-  if(q) orders=orders.filter(g=> (g.order+' '+g.items.map(l=>[l.customer,l.product,l.partNo,l.color,l.size].join(' ')).join(' ')).toLowerCase().includes(q));
+  const terms=searchTerms(SEARCH);
+  if(terms.length){
+    // when searching, look across ALL statuses so you can find any order (ignores the Open/Done filter)
+    orders=orders.filter(g=>matchAll(orderHay(g),terms));
+  } else {
+    orders=orders.filter(g=>{
+      const open=g.items.some(isOpen);
+      if(FILTER==='open') return open;
+      if(FILTER==='ready') return orderReadyToNotify(g.order);
+      if(FILTER==='done') return !open;
+      return true;
+    });
+  }
   orders.sort((a,b)=>{ const oa=oldestDate(a.items), ob=oldestDate(b.items); return FILTER==='done' ? (oa<ob?1:-1) : (oa<ob?-1:1); });
   return orders;
 }
@@ -294,12 +303,15 @@ function restockRow(i){
   </div>`;
 }
 function restockCardHtml(){
-  if(FILTER==='ready') return '';
+  const terms=searchTerms(SEARCH);
   let items=restockItems();
-  if(FILTER==='open') items=items.filter(isOpen);
-  else if(FILTER==='done') items=items.filter(l=>!isOpen(l));
-  const q=SEARCH.trim().toLowerCase();
-  if(q) items=items.filter(l=>[l.product,l.partNo,l.color].join(' ').toLowerCase().includes(q));
+  if(terms.length){
+    items=items.filter(l=>matchAll([l.product,l.partNo,styleOf(l),l.color,l.size,STATUS[l.status]||''].join(' '),terms));
+  } else {
+    if(FILTER==='ready') return '';
+    if(FILTER==='open') items=items.filter(isOpen);
+    else if(FILTER==='done') items=items.filter(l=>!isOpen(l));
+  }
   if(!items.length) return '';
   items.sort((a,b)=> (isOpen(b)?1:0)-(isOpen(a)?1:0) || (a.addedAt<b.addedAt?-1:1));
   const openN=items.filter(isOpen).length;
@@ -317,9 +329,15 @@ function ordersHtml(){
   const restock=restockCardHtml();
   const orders=boOrders();
   if(!orders.length && !restock) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>`;
+  const searching=searchTerms(SEARCH).length>0;
   return restock + orders.map(g=>{
     const l0=g.items[0], open=g.items.filter(isOpen), readyN=g.items.filter(i=>i.status==='ready').length;
     const canNotify=orderReadyToNotify(g.order), allDone=!open.length;
+    // hide finished (done) line items in the working views so only outstanding shows;
+    // show everything under Done/All, when the whole order is done, or while searching.
+    const showAll = FILTER==='done' || FILTER==='all' || searching || allDone;
+    const displayItems = showAll ? g.items : open;
+    const doneHidden = g.items.length - displayItems.length;
     const nc=open.length&&needsContact(l0);
     const ageRef={addedAt:oldestDate(g.items), status: allDone?'done':'open'};
     const prog = allDone ? `<span class="tag">✓ done</span>`
@@ -329,10 +347,10 @@ function ordersHtml(){
     return `<div class="card ocard">
       <div class="ohdr">
         <div><b>#${g.order}</b> · ${l0.customer||'<span class="muted">(no name)</span>'}${nc?' <span class="tag" style="background:rgba(231,161,59,.18);color:#f0c178">⚠ needs contact</span>':''}
-          <div class="chan">${chanLabel(l0.pref)} · ${l0.fulfill==='pickup'?'🏬 Pickup':'📦 Ship'} · ${g.items.length} item${g.items.length>1?'s':''}${ageBadge(ageRef)}</div></div>
+          <div class="chan">${chanLabel(l0.pref)} · ${l0.fulfill==='pickup'?'🏬 Pickup':'📦 Ship'} · ${displayItems.length} item${displayItems.length!==1?'s':''}${doneHidden>0?` <span class="muted">(+${doneHidden} done)</span>`:''}${ageBadge(ageRef)}</div></div>
         <div class="grow" style="flex:1"></div>${prog}<button class="btn sm sec" onclick="printLabel('${g.order}')">🏷 Label</button>${notifyBtn}
       </div>
-      ${g.items.map(itemRow).join('')}
+      ${displayItems.map(itemRow).join('')}
     </div>`;
   }).join('');
 }
@@ -361,7 +379,7 @@ function renderBoard(){
       ${f('done','Done',doneOrders)}
       ${f('all','All',allOrders.length)}
       <div class="grow" style="flex:1"></div>
-      <input class="search" id="boSearch" placeholder="Search name, order, item…" value="${SEARCH.replace(/"/g,'&quot;')}" oninput="applySearch(this.value)">
+      <input class="search" id="boSearch" placeholder="Search anything — e.g. pants 7, navy medium, Smith…" value="${SEARCH.replace(/"/g,'&quot;')}" oninput="applySearch(this.value)">
       <button class="btn sm sec" onclick="go('import')">+ Import PDF</button>
       <button class="btn sm sec" onclick="addManual()">+ Add manually</button>
       <button class="btn sm sec" onclick="addRestock()">🔁 Add Restock</button>
