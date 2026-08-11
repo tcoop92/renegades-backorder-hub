@@ -248,6 +248,8 @@ function go(t){ TAB=t; render(); }
 /* ---------------- board ---------------- */
 let SEARCH='';
 let POSEL=new Set(); let OL_ROWS=[];
+let SCHOOL='all';
+function setSchool(s){ SCHOOL=s; render(); }
 function daysWaiting(l){ return Math.floor((Date.now()-new Date(l.addedAt+'T00:00:00').getTime())/86400000); }
 function ageBadge(l){ if(!isOpen(l)) return ''; const d=daysWaiting(l); if(isNaN(d)||d<0) return '';
   const c=d>=14?'var(--red)':d>=7?'var(--amber)':'var(--mut)';
@@ -262,14 +264,28 @@ function oldestDate(items){ return items.reduce((m,i)=> i.addedAt<m?i.addedAt:m,
 function searchTerms(q){ return (q||'').toLowerCase().split(/\s+/).filter(Boolean); }
 function matchAll(hay, terms){ hay=(hay||'').toLowerCase(); return terms.every(t=>hay.includes(t)); }
 function lineHay(l){ return [l.customer,l.product,l.partNo,styleOf(l),l.color,l.size,l.notes,l.logo,STATUS[l.status]||''].join(' '); }
-function orderHay(g){ return g.order+' '+g.items.map(lineHay).join(' '); }
+/* ----- school detection (from product name prefix) ----- */
+const SCHOOLS=[
+  {code:'BV',    label:'Bishop Verot',   pre:['bv']},
+  {code:'ECS',   label:'ECS',            pre:['ecs']},
+  {code:'SFCA',  label:'SFCA',           pre:['sfca']},
+  {code:'SFX',   label:'SFX',            pre:['sfx']},
+  {code:'SMLS',  label:'St. Michael',    pre:['smls']},
+  {code:'Seton', label:'Seton',          pre:['seton']},
+  {code:'GB',    label:'Gospel Baptist', pre:['gospelbaptist']},
+  {code:'SCA',   label:'SCA',            pre:['sca']},
+];
+function schoolOf(l){ const n=boNorm(l&&l.product); if(!n) return ''; for(const s of SCHOOLS){ if(s.pre.some(p=>n.startsWith(p))) return s.code; } return ''; }
+function orderSchool(g){ for(const it of g.items){ const s=schoolOf(it); if(s) return s; } return ''; }
+function orderHasSchool(g,code){ return code==='other' ? g.items.every(it=>!schoolOf(it)) : g.items.some(it=>schoolOf(it)===code); }
+function schoolLabel(code){ const s=SCHOOLS.find(x=>x.code===code); return code==='other'?'Other':(s?s.label:code); }
 function boOrders(){
   const byOrder={}; DB.filter(l=>!isRestock(l)&&!isWatch(l)).forEach(l=>{ (byOrder[l.order]=byOrder[l.order]||[]).push(l); });
   let orders=Object.keys(byOrder).map(o=>({order:o, items:byOrder[o]}));
   const terms=searchTerms(SEARCH);
   if(terms.length){
-    // when searching, look across ALL statuses so you can find any order (ignores the Open/Done filter)
-    orders=orders.filter(g=>matchAll(orderHay(g),terms));
+    // search only OUTSTANDING orders (at least one item not done), matching against the open items
+    orders=orders.filter(g=>{ const open=g.items.filter(isOpen); return open.length && matchAll(g.order+' '+open.map(lineHay).join(' '),terms); });
   } else {
     orders=orders.filter(g=>{
       const open=g.items.some(isOpen);
@@ -279,7 +295,13 @@ function boOrders(){
       return true;
     });
   }
-  orders.sort((a,b)=>{ const oa=oldestDate(a.items), ob=oldestDate(b.items); return FILTER==='done' ? (oa<ob?1:-1) : (oa<ob?-1:1); });
+  if(SCHOOL!=='all') orders=orders.filter(g=>orderHasSchool(g,SCHOOL));
+  orders.sort((a,b)=>{
+    const sa=orderSchool(a)||'zzz', sb=orderSchool(b)||'zzz';
+    if(sa!==sb) return sa<sb?-1:1;               // group by school
+    const oa=oldestDate(a.items), ob=oldestDate(b.items);
+    return FILTER==='done' ? (oa<ob?1:-1) : (oa<ob?-1:1);
+  });
   return orders;
 }
 function itemRow(i){
@@ -329,16 +351,17 @@ function ordersHtml(){
   const restock=restockCardHtml();
   const orders=boOrders();
   if(!orders.length && !restock) return `<div class="card"><p class="muted" style="text-align:center;padding:30px;margin:0">Nothing here.</p></div>`;
-  const searching=searchTerms(SEARCH).length>0;
   return restock + orders.map(g=>{
     const l0=g.items[0], open=g.items.filter(isOpen), readyN=g.items.filter(i=>i.status==='ready').length;
     const canNotify=orderReadyToNotify(g.order), allDone=!open.length;
     // hide finished (done) line items in the working views so only outstanding shows;
-    // show everything under Done/All, when the whole order is done, or while searching.
-    const showAll = FILTER==='done' || FILTER==='all' || searching || allDone;
+    // show everything under Done/All or when the whole order is done.
+    const showAll = FILTER==='done' || FILTER==='all' || allDone;
     const displayItems = showAll ? g.items : open;
     const doneHidden = g.items.length - displayItems.length;
     const nc=open.length&&needsContact(l0);
+    const sch=orderSchool(g);
+    const schTag = sch?` <span class="tag" style="background:rgba(120,160,255,.16);color:#a9c2ff">🏫 ${sch}</span>`:'';
     const ageRef={addedAt:oldestDate(g.items), status: allDone?'done':'open'};
     const prog = allDone ? `<span class="tag">✓ done</span>`
       : canNotify ? `<span class="tag" style="background:rgba(79,140,255,.18);color:#9cc0ff">all ${open.length} ready</span>`
@@ -346,7 +369,7 @@ function ordersHtml(){
     const notifyBtn = canNotify ? `<button class="btn sm" onclick="openNotifyOrder('${g.order}')">Notify →</button>` : '';
     return `<div class="card ocard">
       <div class="ohdr">
-        <div><b>#${g.order}</b> · ${l0.customer||'<span class="muted">(no name)</span>'}${nc?' <span class="tag" style="background:rgba(231,161,59,.18);color:#f0c178">⚠ needs contact</span>':''}
+        <div><b>#${g.order}</b> · ${l0.customer||'<span class="muted">(no name)</span>'}${schTag}${nc?' <span class="tag" style="background:rgba(231,161,59,.18);color:#f0c178">⚠ needs contact</span>':''}
           <div class="chan">${chanLabel(l0.pref)} · ${l0.fulfill==='pickup'?'🏬 Pickup':'📦 Ship'} · ${displayItems.length} item${displayItems.length!==1?'s':''}${doneHidden>0?` <span class="muted">(+${doneHidden} done)</span>`:''}${ageBadge(ageRef)}</div></div>
         <div class="grow" style="flex:1"></div>${prog}<button class="btn sm sec" onclick="printLabel('${g.order}')">🏷 Label</button>${notifyBtn}
       </div>
@@ -363,8 +386,22 @@ function renderBoard(){
   const doneOrders=allOrders.filter(o=>!orderOpen(o).length).length;
   const readyOrd=readyOrders().length;
   const needsOrd=allOrders.filter(o=>orderOpen(o).length&&needsContact(orderItems(o)[0])).length;
+  // school counts across outstanding orders (drives the school filter bar)
+  const schoolCount={}; let otherN=0, schoolTotal=0;
+  allOrders.forEach(o=>{ const items=orderItems(o); if(!items.some(isOpen)) return; schoolTotal++;
+    const codes=[...new Set(items.map(schoolOf).filter(Boolean))];
+    if(!codes.length) otherN++; else codes.forEach(c=>schoolCount[c]=(schoolCount[c]||0)+1);
+  });
+  const presentSchools=SCHOOLS.map(s=>s.code).filter(c=>schoolCount[c]);
   const stat=(n,lab,hot)=>`<div class="stat ${hot?'hot':''}"><div class="n">${n}</div><div class="l">${lab}</div></div>`;
   const f=(id,lab,n)=>`<div class="filt ${FILTER===id?'on':''}" onclick="setFilter('${id}')">${lab} <b>${n}</b></div>`;
+  const sf=(id,lab,n)=>`<div class="filt ${SCHOOL===id?'on':''}" onclick="setSchool('${id}')">${lab}${n!=null?` <b>${n}</b>`:''}</div>`;
+  const schoolBar = presentSchools.length ? `<div class="filters" style="margin-top:8px">
+      <span class="muted" style="align-self:center;margin-right:2px;font-size:12px">🏫 School:</span>
+      ${sf('all','All',schoolTotal)}
+      ${presentSchools.map(c=>sf(c,schoolLabel(c),schoolCount[c])).join('')}
+      ${otherN?sf('other','Other',otherN):''}
+    </div>` : '';
   document.getElementById('view').innerHTML = `
     <div class="stats">
       ${stat(cnt('new'),'Need to Order')}
@@ -384,6 +421,7 @@ function renderBoard(){
       <button class="btn sm sec" onclick="addManual()">+ Add manually</button>
       <button class="btn sm sec" onclick="addRestock()">🔁 Add Restock</button>
     </div>
+    ${schoolBar}
     <div id="boBody">${ordersHtml()}</div>`;
 }
 function setFilter(f){ FILTER=f; render(); }
