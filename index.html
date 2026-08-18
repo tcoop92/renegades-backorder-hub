@@ -305,12 +305,9 @@ function boOrders(){
   return orders;
 }
 function itemRow(i){
-  let act='';
-  if(i.status==='ordered') act=`<button class="btn sm gh" onclick="arrive('${i.id}','ready')">✓ Ready</button><button class="btn sm sec" onclick="arrive('${i.id}','embroidery')">🧵 Embroidery</button>`;
-  else if(i.status==='embroidery') act=`<button class="btn sm sec" onclick="go('embroidery')">In embroidery →</button>`;
   return `<div class="irow">
     <div class="iname"><b>${i.product}</b><div class="small muted">${i.color||'—'} · ${i.size||'—'} · #${styleOf(i)||'—'} · ×${i.qty}${i.status==='embroidery'&&i.logo?` · 🧵 ${i.logo}`:''}</div></div>
-    ${act}${statusSelect(i)}<button class="btn sm sec" onclick="openEdit('${i.id}')">Edit</button>
+    ${statusSelect(i)}<button class="btn sm sec" onclick="openEdit('${i.id}')">Edit</button>
   </div>`;
 }
 /* ----- restock (internal reorder list — no customer/order) ----- */
